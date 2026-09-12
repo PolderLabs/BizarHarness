@@ -21,7 +21,7 @@ function optionValue(args, flag) {
 
 export function parseAoArgs(args = []) {
   const [first, ...rest] = args;
-  const subcommand = ['setup', 'doctor', 'status', 'sessions', 'help'].includes(first) ? first : 'forward';
+  const subcommand = ['check', 'install', 'update', 'setup', 'doctor', 'status', 'sessions', 'help'].includes(first) ? first : 'forward';
   return {
     subcommand,
     forward: subcommand === 'forward' ? args : rest,
@@ -116,6 +116,9 @@ function help(output = process.stdout) {
 bizar ao — Agent Orchestrator bridge (AO-primary)
 
 Usage:
+  bizar ao check
+  bizar ao install
+  bizar ao update
   bizar ao doctor
   bizar ao setup [--project <id>] [--model <id>] [--permissions <mode>]
   bizar ao status
@@ -123,7 +126,9 @@ Usage:
   bizar ao <any supported ao command> [args...]
 
 AO remains the sole owner of sessions, worktrees, PRs, review feedback,
-previews, and browser state. The setup command registers this repository with AO,
+previews, and browser state. Check runs AO's health checks. Install and update
+open AO through its supported lifecycle command; the AO desktop app owns updates.
+The setup command registers this repository with AO,
 selects Codex for both AO roles, and preserves existing AO project settings.
 It creates and configures the repository-local ${AO_RULES_FILE} as AO worker
 rules, preserving a file that is already present.
@@ -188,6 +193,16 @@ export function doctorAo(options = {}) {
   };
 }
 
+export function checkAo(options = {}) {
+  return runAo(['doctor', '--json'], options);
+}
+
+export function installAo(options = {}) {
+  return runAo(['start', '--json'], options);
+}
+
+export const updateAo = installAo;
+
 export function run(args = [], options = {}) {
   const parsed = parseAoArgs(args);
   const output = options.output || process;
@@ -198,7 +213,10 @@ export function run(args = [], options = {}) {
   try {
     let result;
     if (parsed.subcommand === 'setup') result = setupAo({ ...options, ...parsed });
+    else if (parsed.subcommand === 'check') result = checkAo(options);
     else if (parsed.subcommand === 'doctor') result = doctorAo(options);
+    else if (parsed.subcommand === 'install') result = installAo(options);
+    else if (parsed.subcommand === 'update') result = updateAo(options);
     else if (parsed.subcommand === 'status') result = runAo(['status', '--json'], options);
     else if (parsed.subcommand === 'sessions') result = runAo(['session', 'ls', ...parsed.forward], options);
     else result = runAo(parsed.forward, options);
