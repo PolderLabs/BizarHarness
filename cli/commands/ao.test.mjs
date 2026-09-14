@@ -10,6 +10,7 @@ import {
   isAoSession,
   materializeWorkerRules,
   parseAoArgs,
+  run,
   setupAo,
 } from './ao.mjs';
 
@@ -24,8 +25,30 @@ function scriptedRunner(responses, calls) {
 
 test('parseAoArgs preserves supported AO passthrough commands', () => {
   assert.equal(parseAoArgs(['setup', '--model', 'gpt-5.6']).subcommand, 'setup');
+  assert.equal(parseAoArgs(['check']).subcommand, 'check');
+  assert.equal(parseAoArgs(['install']).subcommand, 'install');
+  assert.equal(parseAoArgs(['update']).subcommand, 'update');
   assert.equal(parseAoArgs(['session', 'ls']).subcommand, 'forward');
   assert.deepEqual(parseAoArgs(['session', 'ls']).forward, ['session', 'ls']);
+});
+
+test('AO lifecycle commands use daemon health checks and desktop-owned startup without project setup', () => {
+  const output = { stdout: { write() {} }, stderr: { write() {} } };
+  const checkCalls = [];
+  run(['check'], {
+    output,
+    execute: scriptedRunner([{ stdout: '{"healthy":true}\n' }], checkCalls),
+  });
+  assert.deepEqual(checkCalls, [['doctor', '--json']]);
+
+  for (const subcommand of ['install', 'update']) {
+    const calls = [];
+    run([subcommand], {
+      output,
+      execute: scriptedRunner([{ stdout: '{"started":true}\n' }], calls),
+    });
+    assert.deepEqual(calls, [['start', '--json']], subcommand);
+  }
 });
 
 test('defaultProjectId produces AO-safe project ids', () => {

@@ -68,11 +68,16 @@ Install Bizar, then configure the repository with a running AO daemon.
 
 ```sh
 npm install -g @polderlabs/bizar
-bizar ao doctor
+bizar ao check
+bizar ao install
+bizar ao update
 bizar ao setup
 ```
 
-`bizar ao setup` preserves AO's existing project configuration while selecting
+`bizar ao check` runs AO health checks. `bizar ao install` and `bizar ao update`
+open AO through its supported lifecycle command; the AO desktop app owns
+installation and updates. `bizar ao setup` remains the separate, explicit
+repository configuration step: it preserves AO's existing project configuration while selecting
 Codex for both AO roles and materializing Bizar's managed repository-local
 worker rules at `.ao/bizar-worker-rules.md`.
 AO remains responsible for spawning workers, messaging, PR claims, review/CI

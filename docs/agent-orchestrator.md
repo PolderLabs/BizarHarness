@@ -14,10 +14,21 @@ or create a competing worktree, session, task, or PR ledger.
 
 Install AO from its official desktop/GitHub distribution and start its local
 daemon. Do not use AO's frozen npm CLI package as the installation source.
-Then configure the repository through AO's supported CLI boundary:
+Use Bizar's AO lifecycle bridge to check the installation, open AO when it is
+missing or needs to start, or hand control to AO's desktop-owned updater:
 
 ```sh
-bizar ao doctor
+bizar ao check
+bizar ao install
+bizar ao update
+```
+
+`check` runs AO's health checks. `install` and `update` both invoke AO's
+supported startup command: AO resolves or opens the desktop app, which owns
+installation and updates. None of these commands registers or changes a
+project. Configure a repository separately through AO's supported CLI boundary:
+
+```sh
 bizar ao setup
 ```
 
