@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [10.31.0] - 2026-09-14
+## [10.32.0] - 2026-09-14
 
 ### Maximum-autonomy audit hardening
 
@@ -17,6 +17,8 @@
   ownership manifests.
 - Updated policy mirrors, product language, and release documentation to match
   the evidence-driven maximum-autonomy contract.
+
+## [10.31.0] - 2026-09-14
 
 ### Added
 

@@ -1,6 +1,6 @@
 {
   "$schema": "bizar.compatibility.v1",
-  "bizar": { "package": "@polderlabs/bizar", "version": "10.31.0" },
+  "bizar": { "package": "@polderlabs/bizar", "version": "10.32.0" },
   "node": { "range": ">=22" },
   "bun": { "range": ">=1.1.0", "supported": true },
   "platforms": ["linux", "darwin"],
