@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [10.31.0] - 2026-09-14
+
+### Added
+
+- **AO lifecycle commands.** `bizar ao check` runs AO health checks, while
+  `bizar ao install` and `bizar ao update` start AO through its supported
+  desktop-owned lifecycle. Repository configuration remains explicit through
+  `bizar ao setup`.
+
 ## [10.30.0] - 2026-09-12
 
 ### Changed
