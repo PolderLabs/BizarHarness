@@ -83,6 +83,12 @@ ship a 1M context ceiling, compact at 600k, and disable the unknown-model clamp:
 These are defaults. An operator's existing values are preserved during a
 normal `bizar update`.
 
+When Claude Code still sends its 200k fallback for a non-Claude gateway model,
+the Bizar renderer uses the configured `CLAUDE_CODE_MAX_CONTEXT_TOKENS` value
+for the displayed denominator and recalculates the percentage. Native Claude
+model IDs continue to use Claude Code's reported context window. The statusline
+ceiling is independent from the 600k auto-compaction threshold.
+
 The renderer automatically reads from your `~/.claude/settings.json`:
 
 - **Custom model**: If `env.ANTHROPIC_CUSTOM_MODEL_OPTION` is set, the `⚡ <model> (custom)` segment appears

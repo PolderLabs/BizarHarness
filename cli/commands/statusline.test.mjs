@@ -120,6 +120,44 @@ test('formatStatusline compact template returns 1 line', () => {
   assert.ok(lines[0].includes('Sonnet 4.5'));
 });
 
+test('formatStatusline uses configured context ceiling for gateway model fallback', () => {
+  const data = {
+    model: { id: 'glm/glm-5.3', display_name: 'GLM 5.3' },
+    workspace: { current_dir: '/test' },
+    context_window: {
+      used_percentage: 10,
+      total_input_tokens: 20000,
+      total_output_tokens: 0,
+      context_window_size: 200000,
+    },
+    cost: { total_cost_usd: 0 },
+  };
+  const output = formatStatusline(data, 'default', { COLUMNS: '80' }, {
+    settings: { env: { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' } },
+  });
+
+  assert.match(output, /2% \(20\.0k\/1M\)/);
+});
+
+test('formatStatusline preserves reported context for native Claude models', () => {
+  const data = {
+    model: { id: 'claude-sonnet-4-5', display_name: 'Sonnet 4.5' },
+    workspace: { current_dir: '/test' },
+    context_window: {
+      used_percentage: 10,
+      total_input_tokens: 20000,
+      total_output_tokens: 0,
+      context_window_size: 200000,
+    },
+    cost: { total_cost_usd: 0 },
+  };
+  const output = formatStatusline(data, 'default', { COLUMNS: '80' }, {
+    settings: { env: { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' } },
+  });
+
+  assert.match(output, /10% \(20\.0k\/200\.0k\)/);
+});
+
 test('formatStatusline git-only template contains branch but not model', () => {
   const data = {
     model: { id: 'sonnet', display_name: 'Sonnet 4.5' },

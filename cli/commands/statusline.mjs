@@ -237,6 +237,9 @@ function formatDuration(seconds) {
 export function formatStatusline(data, templateName, env, deps = {}) {
   const template = TEMPLATE_NAMES.has(templateName) ? templateName : 'default';
   const columns = parseInt(env.COLUMNS || '80', 10);
+  // Settings passed from caller (for purity)
+  const settings = deps.settings || {};
+  const envSettings = settings.env || {};
 
   // Extract data with fallbacks
   const modelId = data?.model?.id || '';
@@ -245,13 +248,27 @@ export function formatStatusline(data, templateName, env, deps = {}) {
   const truncatedCwd = truncatePath(cwd);
   const branch = deps.gitBranch || null;
   const dirty = deps.gitDirty || { modified: 0, staged: 0 };
-  // Use pre-calculated percentage, falling back to manual calculation.
-  // Note: used_percentage is based on input tokens only (excludes output_tokens).
-  const contextTotal = data?.context_window?.context_window_size || 0;
+  // Claude Code reports a hard-coded fallback window for model IDs it does not
+  // recognize (for example, third-party gateway models). When the operator has
+  // explicitly configured a larger ceiling, use it for the display and derive
+  // the percentage from the same denominator. Native Claude model IDs continue
+  // to use Claude Code's reported window.
+  const reportedContextTotal = Number(data?.context_window?.context_window_size) || 0;
+  const configuredContextMax = Number.parseInt(
+    envSettings.CLAUDE_CODE_MAX_CONTEXT_TOKENS ?? env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+    10,
+  );
+  const isNativeClaudeModel = /(?:^|\/)claude(?:-|$)/i.test(modelId);
+  const usesConfiguredContext = !isNativeClaudeModel
+    && reportedContextTotal > 0
+    && Number.isFinite(configuredContextMax)
+    && configuredContextMax > reportedContextTotal;
+  const contextTotal = usesConfiguredContext ? configuredContextMax : reportedContextTotal;
   const contextUsed = data?.context_window?.total_input_tokens || 0;
   const calculatedPercentage = contextTotal > 0 ? (contextUsed / contextTotal) * 100 : 0;
+  const reportedPercentage = data?.context_window?.used_percentage;
   const percentage = Math.max(0, Math.min(100, Math.round(
-    data?.context_window?.used_percentage ?? calculatedPercentage,
+    usesConfiguredContext ? calculatedPercentage : (reportedPercentage ?? calculatedPercentage),
   )));
   const cost = data?.cost?.total_cost_usd || 0;
   // Use cost.total_duration_ms if available (in ms), convert to seconds
@@ -259,8 +276,6 @@ export function formatStatusline(data, templateName, env, deps = {}) {
   const sessionDuration = Math.floor(durationMs / 1000);
   const prNumber = data?.pr?.number || null;
 
-  // Settings passed from caller (for purity)
-  const settings = deps.settings || {};
   const advisorModel = settings.advisorModel || null;
   const customModel = settings.env?.ANTHROPIC_CUSTOM_MODEL_OPTION || null;
 
