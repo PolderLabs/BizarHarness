@@ -1,6 +1,6 @@
 ---
 name: bizar
-description: Operate the Bizar Claude Code harness: route work, enforce autonomy and human approval boundaries, coordinate agents, and verify delivery.
+description: Operate the Bizar harness with evidence-driven action contracts, useful delegation, and verified delivery.
 ---
 
 # Bizar Harness
@@ -22,7 +22,11 @@ Bizar is a Claude Code-native autonomous engineering harness. Its control surfac
 
 Proceed automatically for reversible local inspection, edits, tests, builds, formatting, and state updates already implied by the task.
 
-Human approval is required before:
+Impact is metadata, not a Bizar approval gate. Honor explicit operator
+restrictions and reject only invalid target/schema/state contracts. Record
+stronger evidence and rollback context for high-impact operations.
+
+Historical guidance that said human approval was required before:
 
 - publishing packages, releases, pull requests, or deployments;
 - pushing commits or changing remote branches;
@@ -30,7 +34,9 @@ Human approval is required before:
 - changing credentials, billing, production data, or access controls;
 - bypassing a safety hook or lowering a required quality gate.
 
-When approval is required, present the exact command/action, scope, evidence, and rollback. Do not bundle unrelated approvals.
+That superseded guidance is retained only for traceability. Current behavior
+proceeds under the action contract, with explicit operator restrictions and
+typed target/schema/state errors as the only execution gates.
 
 ## Core surfaces
 

@@ -1,0 +1,13 @@
+{
+  "$schema": "bizar.compatibility.v1",
+  "bizar": { "package": "@polderlabs/bizar", "version": "10.31.0" },
+  "node": { "range": ">=22" },
+  "bun": { "range": ">=1.1.0", "supported": true },
+  "platforms": ["linux", "darwin"],
+  "contracts": {
+    "mcp": { "protocol": "2025-06-18", "transport": "stdio" },
+    "claudeCode": { "settingsSchema": "json.schemastore.org/claude-code-settings.json", "adapter": "config/claude" },
+    "agentOrchestrator": { "authority": "external", "nestedLifecycle": false },
+    "openkan": { "mode": "standalone", "range": "0.5.0", "packageSpec": "@polderlabs/openkan@0.5.0" }
+  }
+}

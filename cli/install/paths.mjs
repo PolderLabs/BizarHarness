@@ -63,7 +63,7 @@ export function printInstallLocations(_opts = {}) {
   console.log(chalk.bold('│') + `    ├─ loops/           autonomous loop state`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `    └─ installed.json   install manifest (version, hash)`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `  OpenKan runtime      ${PATHS.openkanHome}`.padEnd(69) + chalk.bold('│'));
-  console.log(chalk.bold('│') + `    └─ npm package      @polderlabs/openkan@latest + agent/skill`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    └─ npm package      @polderlabs/openkan@0.5.0 + agent/skill`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
   console.log(chalk.bold('│') + `  Override with: ${dim('CLAUDE_CONFIG_DIR=/path/to/dir')}`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('└──────────────────────────────────────────────────────────────────────┘'));

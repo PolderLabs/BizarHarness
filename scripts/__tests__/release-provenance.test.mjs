@@ -284,18 +284,12 @@ describe('release provenance — verifyRelease happy path (audit #83)', () => {
     assert.match(result.detail, /99\.99\.99/);
   });
 
-  it('accepts an unsigned release pinned in KNOWN_GOOD_RELEASES (allowlist-only check)', async () => {
+  it('rejects an unsigned release even when it is pinned in KNOWN_GOOD_RELEASES', async () => {
     // Re-import the SDK and locate the unsigned 10.26.0 pin.
     const sdk = await import('../../packages/sdk/dist/release/index.js');
     const pinned = sdk.lookupKnownGoodRelease('10.26.0');
     assert.ok(pinned, '10.26.0 must be pinned');
     assert.equal(pinned.unsigned, true);
-    // For unsigned releases, verify-release skips tarball sha256 /
-    // SBOM / provenance / signature checks (the in-tarball pin can
-    // never converge with the build/pack loop, so any "real" SHA
-    // pin is structurally unreachable). The contract degrades to
-    // "version is pinned in the allowlist" — empty tarball bytes
-    // are accepted because no SHA check runs.
     const result = sdk.verifyRelease({
       version: '10.26.0',
       tarballBytes: Buffer.alloc(0),
@@ -303,9 +297,8 @@ describe('release provenance — verifyRelease happy path (audit #83)', () => {
       provenanceJsonl: '',
       minisigText: '',
     });
-    assert.equal(result.ok, true);
-    assert.equal(result.version, '10.26.0');
-    assert.equal(result.minisignKeyId, 'unsigned');
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'TARBALL_HASH_MISMATCH');
   });
 });
 

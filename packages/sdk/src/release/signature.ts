@@ -77,11 +77,18 @@ export function parseMinisign(text: string): MinisignSignature | { ok: false; re
 
   let sigBin: Buffer;
   try {
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureB64) || !/^[A-Za-z0-9+/]+={0,2}$/.test(trustedB64)) {
+      return { ok: false, reason: "INVALID_SIGNATURE_BLOB" };
+    }
     sigBin = Buffer.from(signatureB64, "base64");
     // Trusted-comment base64 blob is part of the minisign layout but
     // not used in JS-side verification (we reconstruct the trusted
     // comment from the artifact's sha256). Read it for shape parity.
-    Buffer.from(trustedB64, "base64");
+    const trustedBin = Buffer.from(trustedB64, "base64");
+    if (trustedBin.length === 0) return { ok: false, reason: "INVALID_SIGNATURE_BLOB" };
+    if (trustedLine && trustedBin.toString("utf8") !== `${trustedLine}\n`) {
+      return { ok: false, reason: "INVALID_SIGNATURE_BLOB" };
+    }
   } catch {
     return { ok: false, reason: "INVALID_SIGNATURE_BLOB" };
   }
@@ -89,7 +96,7 @@ export function parseMinisign(text: string): MinisignSignature | { ok: false; re
   // Minisign signature blob layout (unencrypted): 2-byte sig
   // header + 64-byte sig + 8-byte key id = 74 bytes total. The
   // header is opaque to us; the parser skips the first 2 bytes.
-  if (sigBin.length < 74) return { ok: false, reason: "INVALID_SIGNATURE_BLOB" };
+  if (sigBin.length !== 74 && sigBin.length !== 76) return { ok: false, reason: "INVALID_SIGNATURE_BLOB" };
   const keyId = sigBin.subarray(sigBin.length - 8).toString("hex");
   const signature = sigBin.subarray(2, 2 + 64).toString("hex");
 
@@ -142,6 +149,9 @@ export function verifyMinisign(
   // We rebuild the trusted comment from the artifact's sha256 (the
   // minisign CLI prints this as the trusted-comment body).
   const artifactSha256 = createHash("sha256").update(artifactBytes).digest("hex");
+  if (!/^[0-9a-f]{16}$/i.test(signatureBlob.keyId)) {
+    return { ok: false, reason: "INVALID_SIGNATURE_BLOB", detail: "key id must be 8 bytes encoded as 16 hex characters" };
+  }
   const trustedComment = `trusted comment: signed by bizar ${signatureBlob.keyId} sha256=${artifactSha256}\n`;
 
   if (expectedTrustedComment && trustedComment.trim() !== expectedTrustedComment.trim()) {

@@ -1,5 +1,9 @@
 # POLICY: Full permissions + advisory hooks + always-fetch-docs
 
+> Superseded historical record. Current semantics are defined by
+> [`AUTONOMY_CONTRACT.md`](AUTONOMY_CONTRACT.md): maximum autonomy by default,
+> typed contract failures, and no Bizar impact-based approval gate.
+
 **Status:** Accepted
 **Date:** 2026-08-26
 **Author:** @mike (orchestrator) on user request

@@ -1,6 +1,6 @@
 import { afterEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
@@ -87,4 +87,21 @@ test('backup retains project state without removed subsystem payloads', async ()
   });
   assert.equal(restored.ok, true, restored.errors.join('; '));
   assert.equal(readFileSync(join(project, '.bizar', 'state.json'), 'utf8'), '{"status":"active"}');
+});
+
+test('backup and restore reject symlink escapes instead of following them', async () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'bizar-backup-symlink-'));
+  roots.push(fixture);
+  const project = join(fixture, 'project');
+  const outside = join(fixture, 'outside');
+  const outDir = join(fixture, 'backups');
+  mkdirSync(join(project, '.bizar'), { recursive: true });
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(join(outside, 'secret.txt'), 'secret');
+  symlinkSync(outside, join(project, '.bizar', 'linked'));
+  const backup = await createBackup({ outDir, projectRoot: project, label: 'symlink', bizarHome: join(fixture, 'global-config') });
+  assert.equal(backup.manifest.paths.some((entry) => entry.label === 'project-state'), false);
+  const restored = await restoreBackup({ backupPath: backup.path, projectRoot: project, bizarHome: join(fixture, 'global-config') });
+  assert.equal(restored.ok, true);
+  assert.equal(readFileSync(join(outside, 'secret.txt'), 'utf8'), 'secret');
 });

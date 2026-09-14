@@ -32,7 +32,9 @@ make session-end              # lifecycle compatibility target
 - **MUST** verify evidence before claiming completion.
 - **MUST NOT** commit `console.log`, `debugger`, `.only()`, credentials, generated secrets, or runtime logs.
 - **MUST NOT** use a persistent Claude daemon. Claude Code and the Agent SDK run in-process; background work uses Claude Code's Agent tool.
-- **MUST NOT** rebase or force-push under the default project policy.
+- **MUST NOT** rebase or force-push unless an explicit operator restriction or
+  host/runtime contract forbids it; Bizar itself does not gate high-impact
+  actions by impact.
 
 ### Worktree discipline
 
@@ -58,16 +60,16 @@ edit, test, and iterate without pausing for routine decisions. Routine
 decisions (file layout, naming, scope of a single commit, choosing between
 two equivalent stdlib calls, picking a verification command from the Makefile,
 or completing an OpenKan task after `make check` is green) do NOT require
-human approval and MUST NOT trigger a permission handoff. PreToolUse hooks
-still deny prohibited actions and escalate externally visible or irreversible
-actions with `permissionDecision: "ask"`; that escalation list is the
-authoritative floor, not a starting point.
+human approval and MUST NOT trigger a permission handoff. PreToolUse hooks may
+classify high-impact actions and add evidence guidance, but they must not deny
+or ask solely because an action is externally visible, irreversible, or
+powerful. Invalid target/schema/state is a typed contract error, not a
+permission handoff.
 
-Mike performs bounded read-only orientation, then uses a native Agent team as
-the default for substantive work. Direct work is reserved for an unmistakably
-tiny single-target copy/style/format edit or the user's explicit `/quick`
-request. A single Agent or native workflow is used only when the user
-explicitly requests that mode or a durable workflow must be resumed. Ask one
+Mike performs bounded read-only orientation, then chooses the smallest capable
+execution surface for the requested outcome. Direct work is the default when
+one agent can safely complete and verify the task; native Agent teams are used
+only when independent lanes materially improve throughput or correctness. Ask one
 concise clarification question only when a material choice, acceptance
 criterion, safety boundary, or unresolved constraint would change the work;
 otherwise continue autonomously. The team is host-side state under
@@ -86,46 +88,25 @@ default. If no enabled configured candidate exists, dispatch fails with an
 actionable configuration error. Bizar never retries a failed dispatch by cycling
 aliases, providers, or tiers.
 
-The authoritative hard approval list (cannot be auto-approved) is: pushes, pull-request
+The authoritative default is maximum autonomy; pushes, pull-request
 mutations, releases, package publication, deployments, production/shared-
 infrastructure writes, credential changes, public exposure, irreversible
-destruction. Everything else proceeds.
+destruction proceed when explicitly requested and contract-valid. Stronger
+evidence and rollback handling are required; a permission prompt is not.
 
-Under F-176 the seven-category floor above is enforced by `permission-request.mjs`
-(the destructive subset: force-push, rebase, root deletion, system-destructive
-commands) and surfaced for the rest via `git-workflow-guard.mjs` as advisory
-reminders in `hookSpecificOutput.additionalContext`. `permissions.deny` and
-`permissions.ask` are emptied by design — the floor is enforced by hook output,
-not by Claude Code prompts.
-
-> Note: `config/claude/settings.json` ships `permissions.ask` moved into
-> `permissions.allow` so subagents do not prompt for commits, pushes, PRs,
-> or deploys. Operators who want HITL back can move the following exact
-> patterns from `permissions.allow` into `permissions.ask` in their local
-> `~/.claude/settings.json` override:
->
-> - `Bash(git push *)`
-> - `Bash(git -C * push *)`
-> - `Bash(git --git-dir=* push *)`
-> - `Bash(git push --force *)`
-> - `Bash(git push -f *)`
-> - `Bash(git rebase *)`
-> - `Bash(gh pr create *)`
-> - `Bash(gh pr merge *)`
-> - `Bash(gh release create *)`
-> - `Bash(npm publish *)`
-> - `Bash(bun publish *)`
-> - `Bash(pnpm publish *)`
-> - `Bash(vercel deploy *)`
-> - `Bash(wrangler deploy *)`
-> - `Bash(flyctl deploy *)`
+The default maximum-autonomy profile is implemented by the host runtime;
+`permission-request.mjs` is a fail-open compatibility hook. The workflow and
+PreToolUse hooks may emit advisory evidence guidance but never create a Bizar
+approval gate.
+Historical F-176 approval-floor wording is retained only in superseded audit
+records. Operators may configure their host independently, but Bizar does not
+reintroduce an impact-based or role-based gate.
 
 > Note: `disableAutoCompact: false` is shipped by default so Claude Code can
 > compact automatically before the context limit. Hook `precompact-priorities.sh`
 > snapshots bounded state and preserves evidence and decisions on compaction.
-Local `git commit` is always allowed silently via `permissions.allow`; the seven
-HITL categories above are gated by `permission-request.mjs` plus the advisory
-hook chain.
+Local and external mutations follow the same action-contract path; hooks add
+evidence guidance only.
 
 Agents fetch current official documentation via WebSearch + WebFetch before
 acting on an external API, library, framework, CLI, configuration format, or
@@ -140,14 +121,11 @@ The autonomy and approval policy above governs this execution model. The project
 Every non-empty primary request enters Bizar through `office-manager` (`@mike`).
 The installer sets Claude Code's global `agent` setting to Mike's frontmatter
 name (`mike`),
-and the routing hook supplies the team-first coordination policy. For non-tiny
-work, Mike first gathers only bounded read-only context. When the inferred
-outcome, acceptance criteria, and safety boundary are clear, it forms the
-default Agent team and continues autonomously. It asks one concise
+and the routing hook supplies the coordination policy. Mike gathers bounded
+read-only context, selects direct execution or a narrowly scoped Agent team
+based on coordination value, and continues autonomously. It asks one concise
 clarification only when a material choice or unresolved constraint would
-change the work. `/quick` explicitly selects direct primary-session execution;
-single Agents and native workflows are explicit or resumed modes. Mike owns
-integration and final verification.
+change the work. Mike owns integration and final verification.
 A Bizar custom agent already executing its assigned role does not recursively
 dispatch itself.
 
@@ -202,3 +180,9 @@ not a general note vault, semantic search service, or knowledge-base API.
 3. `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make test`, `make e2e`, `make clean-check`, and `make check` pass as applicable.
 4. The OpenKan task records fresh verification evidence and no required work remains.
 5. `/simplify` reviews the staged diff before the approval-gated commit.
+
+<!-- openwolf:begin -->
+# OpenWolf
+
+This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md at session start. Check .wolf/cerebrum.md before generating code. Grep .wolf/anatomy.md for a file's path before reading it (never read the whole index).
+<!-- openwolf:end -->

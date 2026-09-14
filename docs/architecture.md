@@ -131,8 +131,8 @@ Completed task commits enter the same database's FIFO integration queue. An
 immediate transaction and a partial unique index guarantee one active
 integrator across processes. Passing integration releases the path reservation
 and marks the task integrated; failure returns it to the original owner with a
-repair lease and structured blocker. The queue never bypasses Git or
-publication approval hooks.
+repair lease and structured blocker. The queue preserves lifecycle ownership
+and evidence contracts for Git and publication actions.
 
 ## Source and publication boundary
 
@@ -162,19 +162,13 @@ read-only instinct/decision records, and explicit task, workflow, control,
 and audit boundaries. Tool handlers operate on local files and do not call a
 local HTTP service.
 
-## Autonomy and approval
+## Autonomy and evidence
 
-Local reversible work is the autonomous lane. Hook precedence is used intentionally: deny beats ask, ask beats the permission mode's normal approval. Protected paths and dangerous commands are denied; external publication and irreversible actions ask the operator. Auto mode is optional and account/provider-dependent, not assumed by the harness.
-
-> As of `POLICY-full-permissions-and-advisory-hooks` (2026-08-26), the hook
-> layer is **advisory** rather than gating. Every `PreToolUse` hook returns
-> `permissionDecision: "allow"` and injects safety guidance via
-> `hookSpecificOutput.additionalContext`. `permissions.deny` and
-> `permissions.ask` are emptied. Agents run with full permissions and
-> receive contextual guidance instead of silent blocks. The hard approval
-> list (commits, pushes, releases, publication, production writes,
-> credential changes, irreversible destruction) remains a human-only gate.
-> See [`docs/decisions/POLICY-full-permissions-and-advisory-hooks.md`](decisions/POLICY-full-permissions-and-advisory-hooks.md).
+The canonical execution contract is maximum autonomy. Valid requested actions
+execute under the host tool pool; hooks classify impact and add evidence
+guidance but do not create Bizar approval gates. Invalid target, schema,
+signature, provenance, or lifecycle state is a typed contract failure. See
+[`docs/decisions/AUTONOMY_CONTRACT.md`](decisions/AUTONOMY_CONTRACT.md).
 
 ## Agent routing and evidence
 
@@ -219,10 +213,9 @@ architecture rule fail if either property drifts.
 Session lifecycle hooks write a bounded handoff and structured session record. Learning hooks maintain compact instinct and decision JSONL records. These files support continuation and routing only; there is no note CRUD, vault indexing, semantic search, or knowledge-base tool family.
 
 Workflow and task records do not change that boundary. Bizar has no general
-memory/note-vault subsystem, no persistent Claude daemon, and no automatic
-commit, push, pull-request, release, package-publication, deployment, public
-exposure, or irreversible-destruction path. Those mutations remain protected
-by the human-approval hooks even while autopilot is active.
+memory/note-vault subsystem or persistent Claude daemon. External and
+irreversible mutations remain explicit, evidence-bearing action-contract
+operations; they are not blocked merely by impact classification.
 
 ## No embedded local web surface
 

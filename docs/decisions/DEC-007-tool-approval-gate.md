@@ -1,18 +1,17 @@
-# DEC-007 — Native Claude Code approval gate
+# DEC-007 — Native Claude Code action-contract adapter
 
 **Status:** Accepted and revised 2026-07-30
 
 ## Decision
 
-Use Claude Code's `PreToolUse` hook output and settings permission table
-as the only host-operation approval boundary. Dangerous shell and
-sensitive-path operations are denied. Git commits, pushes, PR mutations,
-releases, publication, and deployments return `ask` so a human must
-approve them.
+Use Claude Code's native runtime as the execution authority. Bizar's hooks
+validate concrete target/state/schema contracts and may add advisory evidence
+context. Impact alone never returns `ask` or `deny`; explicit operator
+restrictions remain separate task metadata.
 
-Safe hooks omit `permissionDecision`; Claude Code remains authoritative.
-Force push and rebase are always denied. A commit also requires a fresh
-successful `/simplify` token.
+The PermissionRequest compatibility hook fails open. Force-push, rebase,
+publication, deployment, and system operations are valid when requested and
+contract-valid; they require stronger observed evidence and rollback handling.
 
 ## Implementation
 

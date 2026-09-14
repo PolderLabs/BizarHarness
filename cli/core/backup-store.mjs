@@ -18,6 +18,7 @@ import {
   statSync,
   lstatSync,
   readlinkSync,
+  realpathSync,
 } from 'node:fs';
 import { join, resolve, dirname, basename, relative, sep, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
@@ -53,6 +54,22 @@ function resolvePath(p) {
 function isWithin(root, target) {
   const rel = relative(resolve(root), resolve(target));
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+function canonicalExistingPath(path) {
+  try { return realpathSync(path); } catch { return resolve(path); }
+}
+
+function assertNoSymlinkPath(path, root, label) {
+  const absoluteRoot = canonicalExistingPath(root);
+  const absolute = resolve(path);
+  if (!isWithin(absoluteRoot, absolute)) throw new Error(`${label} escapes its root`);
+  let current = absoluteRoot;
+  const rel = relative(absoluteRoot, absolute);
+  for (const segment of rel.split(sep).filter(Boolean)) {
+    current = join(current, segment);
+    if (lstatSync(current).isSymbolicLink()) throw new Error(`${label} contains a symlink: ${current}`);
+  }
 }
 
 function safeLabel(label) {
@@ -97,6 +114,7 @@ function dirSize(dir) {
  */
 function safeCopyDir(src, dst) {
   let count = 0;
+  let failed = false;
   try {
     mkdirSync(dst, { recursive: true });
     for (const entry of readdirSync(src, { withFileTypes: true })) {
@@ -106,18 +124,13 @@ function safeCopyDir(src, dst) {
         if (entry.isDirectory()) {
           count += safeCopyDir(srcPath, dstPath);
         } else if (entry.isSymbolicLink()) {
-          // Check if symlink target exists before copying
-          const linkTarget = readlinkSync(srcPath);
-          if (existsSync(join(src, linkTarget)) || existsSync(linkTarget)) {
-            copyFileSync(srcPath, dstPath);
-            count++;
-          }
-          // Skip broken symlinks
+          throw new Error(`symlink entries are not supported: ${srcPath}`);
         } else {
           copyFileSync(srcPath, dstPath);
           count++;
         }
       } catch (err) {
+        failed = true;
         console.warn(`[backup-store] Failed to copy ${srcPath}: ${err.message}`);
       }
     }
@@ -125,7 +138,7 @@ function safeCopyDir(src, dst) {
     console.warn(`[backup-store] Failed to copy directory ${src}: ${err.message}`);
     return -1;
   }
-  return count;
+  return failed ? -1 : count;
 }
 
 /**
@@ -144,16 +157,13 @@ function copyItem(src, dst, options = {}) {
 
     if (stat.isDirectory()) {
       const result = safeCopyDir(src, dst);
+      if (result < 0) {
+        try { rmSync(dst, { recursive: true, force: true }); } catch { /* ignore cleanup */ }
+      }
       if (result >= 0 && onprogress) onprogress(src, dst);
       return result >= 0;
     } else if (stat.isSymbolicLink()) {
-      // Check if symlink target exists before copying
-      const linkTarget = readlinkSync(src);
-      if (!existsSync(linkTarget)) {
-        console.warn(`[backup-store] Skipping broken symlink: ${src}`);
-        return false;
-      }
-      copyFileSync(src, dst);
+      throw new Error(`refusing to copy symlink: ${src}`);
     } else {
       copyFileSync(src, dst);
     }
@@ -234,8 +244,8 @@ export async function createBackup({ outDir = '~/.local/share/bizar/backups', la
     const src = expandPath(item.src);
     const dst = join(backupPath, item.label);
     if (existsSync(src)) {
-      copyItem(src, dst);
-      backed.push({ label: item.label, src: item.src });
+      if (copyItem(src, dst)) backed.push({ label: item.label, src: item.src });
+      else skipped.push({ label: item.label, reason: 'source contains unsupported symlink or could not be copied' });
     } else if (item.required) {
       skipped.push({ label: item.label, reason: 'required source missing' });
     } else {
@@ -250,8 +260,8 @@ export async function createBackup({ outDir = '~/.local/share/bizar/backups', la
       const src = join(resolvedProject, item.src);
       const dst = join(backupPath, item.label);
       if (existsSync(src)) {
-        copyItem(src, dst);
-        backed.push({ label: item.label, src: item.src });
+        if (copyItem(src, dst)) backed.push({ label: item.label, src: item.src });
+        else skipped.push({ label: item.label, reason: 'source contains unsupported symlink or could not be copied' });
       } else {
         skipped.push({ label: item.label, reason: 'optional source not present' });
       }
@@ -357,6 +367,9 @@ export async function restoreBackup({
   if (!existsSync(backupPath)) {
     return { ok: false, restored: [], skipped: [], errors: [`Backup not found: ${backupPath}`] };
   }
+  try { assertNoSymlinkPath(backupPath, dirname(backupPath), 'backup path'); } catch (error) {
+    return { ok: false, restored: [], skipped: [], errors: [error.message] };
+  }
 
   let manifest;
   try {
@@ -389,6 +402,10 @@ export async function restoreBackup({
       errors.push(`Backup entry missing: ${label}`);
       continue;
     }
+    try { assertNoSymlinkPath(src, backupPath, `backup entry ${label}`); } catch (error) {
+      errors.push(error.message);
+      continue;
+    }
 
     // Determine destination
     let dst;
@@ -406,6 +423,15 @@ export async function restoreBackup({
         continue;
       }
       dst = expandPath(original.src);
+    }
+
+    try {
+      const root = projectEntry ? resolve(projectRoot) : dirname(dst);
+      assertNoSymlinkPath(root, root, 'restore root');
+      if (existsSync(dst)) assertNoSymlinkPath(dst, root, 'restore destination');
+    } catch (error) {
+      errors.push(error.message);
+      continue;
     }
 
     const targetExists = existsSync(dst);
@@ -461,10 +487,16 @@ export async function restoreBackup({
  * Files in src newer than dst are copied; dst-only files are preserved.
  */
 function overlayDir(srcDir, dstDir) {
+  if (lstatSync(srcDir).isSymbolicLink() || (existsSync(dstDir) && lstatSync(dstDir).isSymbolicLink())) {
+    throw new Error('refusing to traverse a symlink during restore');
+  }
   mkdirSync(dstDir, { recursive: true });
   for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
     const src = join(srcDir, entry.name);
     const dst = join(dstDir, entry.name);
+    if (entry.isSymbolicLink() || (existsSync(dst) && lstatSync(dst).isSymbolicLink())) {
+      throw new Error(`refusing symlink restore entry: ${entry.name}`);
+    }
     if (entry.isDirectory()) {
       overlayDir(src, dst);
     } else {

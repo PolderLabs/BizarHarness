@@ -28,6 +28,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -264,6 +265,32 @@ export function writeInstallMarker({ version, repoPath, serviceUnit }) {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+}
+
+export function ownershipManifestPath() { return join(BIZAR_HOME(), 'ownership.json'); }
+
+function hashFile(path) {
+  try { return createHash('sha256').update(readFileSync(path)).digest('hex'); } catch { return null; }
+}
+
+function collectOwnedFiles(root, dir = root, out = {}) {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) collectOwnedFiles(root, path, out);
+    else if (entry.isFile()) out[path] = { sha256: hashFile(path), installedBy: BIZAR_VERSION };
+  }
+  return out;
+}
+
+export function writeOwnershipManifest({ dryRun = false } = {}) {
+  const files = {};
+  for (const root of [CLAUDE_AGENTS_DIR, CLAUDE_SKILLS_DIR, CLAUDE_COMMANDS_DIR, CLAUDE_HOOKS_DIR, CLAUDE_RULES_DIR]) {
+    Object.assign(files, collectOwnedFiles(root));
+  }
+  const manifest = { schema: 'bizar.install-ownership.v1', generatedAt: new Date().toISOString(), version: BIZAR_VERSION, files };
+  if (!dryRun) writeFileSync(ownershipManifestPath(), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  return manifest;
 }
 
 // ─── Version helpers ─────────────────────────────────────────────────────────
@@ -680,21 +707,11 @@ export function mergeBizarHooks(existingHooks = {}, desiredHooks = {}) {
   return cleaned;
 }
 
-// Local `git commit` is intentionally allowed silently (see AGENTS.md
-// "Autonomy and parallelism"); only `git push`, `gh pr`/`release`,
-// publishes, and deploys remain hard HITL mutations.
-const HARD_MUTATION_PERMISSION = /^(?:Bash\()?\s*(?:git\s+push|gh\s+(?:pr\s+(?:create|edit|merge|close|reopen|ready|review|comment)|release\s+(?:create|edit|delete|upload))|(?:npm|bun|pnpm)\s+publish|(?:vercel|wrangler|flyctl)\s+(?:deploy|publish))\b/i;
+// External and destructive commands remain valid under maximum autonomy;
+// the inventory below is advisory metadata used for evidence and drift tests.
 
-// F-180 — documentation-as-code surface for the "hard approval list" from
-// AGENTS.md. These are the categories of mutations that the Bizar policy
-// treats as human-only gates; the `permission-request.mjs` hook enforces
-// the destructive subset (force-push, rebase, root deletion,
-// system-destructive commands) and the `git-workflow-guard.mjs`
-// advisory hook surfaces the rest. Operators may NOT move any of these
-// patterns into `permissions.allow` without explicitly opting out of the
-// Bizar guard. The list mirrors the AGENTS.md "authoritative hard
-// approval list" verbatim so a drift in one place fails the regression
-// test in `cli/provision.test.mjs`.
+// F-180 compatibility inventory. These patterns are not permission gates;
+// current hooks only attach advisory context and evidence guidance.
 export const HARD_MUTATION_ALLOW = Object.freeze([
   'Bash(git push *)',
   'Bash(git -C * push *)',
@@ -852,7 +869,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       bizar: {
         type: 'stdio',
         command: 'npx',
-        args: ['-y', '@polderlabs/bizar-sdk', 'mcp'],
+        args: ['-y', '@polderlabs/bizar-sdk'],
         env: { BIZAR_HOME: BIZAR_HOME() },
       },
       semble: { type: 'stdio', command: 'semble', args: ['mcp'] },
@@ -881,9 +898,8 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       ],
       soft_deny: [
         '$defaults',
-        'Commits, pushes, pull-request mutations, releases, package publication, or deployments without the configured human approval hook.',
-        'Force push, rebase, remote branch deletion, or other history rewriting.',
-        'Production or shared-infrastructure writes, credential changes, public exposure, or irreversible local destruction.',
+        'Advisory only: record stronger evidence and rollback context for external, destructive, or production mutations.',
+        'Advisory only: validate target, identity, schema, and lifecycle state before mutation.',
       ],
     },
     attribution: shipped.attribution || { commit: '', pr: '' },
@@ -1047,9 +1063,9 @@ export function setupMcpServer({ dryRun = false } = {}) {
   // Honour `dryRun` BEFORE checking for the `claude` CLI: a dry-run
   // should never fail just because the host does not have Claude Code
   // installed (CI runners, fresh dev containers, agent sandboxes).
-  if (dryRun) return { ok: true, message: '[dry-run] would run: claude mcp add bizar -- npx -y @polderlabs/bizar-sdk mcp' };
+  if (dryRun) return { ok: true, message: '[dry-run] would run: claude mcp add bizar -- npx -y @polderlabs/bizar-sdk' };
   if (!haveCmd('claude')) return { ok: false, message: 'claude CLI not on PATH' };
-  const r = spawnSync('claude', ['mcp', 'add', '-f', '-s', 'user', 'bizar', '--', 'npx', '-y', '@polderlabs/bizar-sdk', 'mcp'], { stdio: 'inherit', timeout: 60_000 });
+  const r = spawnSync('claude', ['mcp', 'add', '-f', '-s', 'user', 'bizar', '--', 'npx', '-y', '@polderlabs/bizar-sdk'], { stdio: 'inherit', timeout: 60_000 });
   if (r.status !== 0) return { ok: false, message: `claude mcp add exited with code ${r.status}` };
   return { ok: true, message: 'bizar MCP server registered' };
 }
@@ -1138,7 +1154,7 @@ export async function ensureOpenKanRuntime({
       return { ok: false, skipped: true, message: `OpenKan unavailable and installation skipped: ${error.message}` };
     }
     if (dryRun) {
-      return { ok: true, installed: false, home: installHome, message: `[dry-run] would install OpenKan natively via npm (${packageSpec || '@polderlabs/openkan@latest'}) under ${installHome}` };
+      return { ok: true, installed: false, home: installHome, message: `[dry-run] would install OpenKan natively via npm (${packageSpec || '@polderlabs/openkan@0.5.0'}) under ${installHome}` };
     }
     try {
       const result = await install({ home: installHome, packageSpec, force, persistConfig: true });
@@ -1223,6 +1239,7 @@ export async function runProvision(opts = {}) {
   await runStep('Syncing workflows',  () => syncConfigExtras({ dryRun }));
   await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
+  writeOwnershipManifest({ dryRun });
 
   section('Writing settings.json');
   const settingsStep = writeClaudeSettings({ dryRun, force });

@@ -56,7 +56,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ensureSecureDir } from './secure-dir.mjs';
 import {
@@ -145,19 +145,57 @@ function readCurrentFile({ file, cwd }) {
   return { abs, bytes: readFileSync(abs, 'utf8') };
 }
 
+/** Parse a deliberately small argv form without invoking a shell. */
+export function parseSimpleArgv(command) {
+  if (typeof command !== 'string' || !command.trim()) throw new TypeError('verification command must be non-empty');
+  if (/(?:;|&&|\|\||`|\$\(|>|<|\n|\r)/.test(command)) {
+    throw new TypeError('verification command contains shell syntax; use argv');
+  }
+  const argv = [];
+  let token = '';
+  let quote = null;
+  let escaped = false;
+  for (const char of command.trim()) {
+    if (escaped) { token += char; escaped = false; continue; }
+    if (char === '\\' && quote !== "'") { escaped = true; continue; }
+    if (quote) {
+      if (char === quote) quote = null;
+      else token += char;
+      continue;
+    }
+    if (char === '"' || char === "'") { quote = char; continue; }
+    if (/\s/.test(char)) {
+      if (token) { argv.push(token); token = ''; }
+      continue;
+    }
+    token += char;
+  }
+  if (escaped || quote || !token && argv.length === 0) throw new TypeError('verification command has unterminated quoting');
+  if (token) argv.push(token);
+  return argv;
+}
+
+function runVerification(verification, cwd) {
+  const verifyCwd = verification.cwd || cwd;
+  const timeout = Number(verification.timeoutMs) || 60_000;
+  const argv = Array.isArray(verification.argv) ? verification.argv : parseSimpleArgv(verification.command);
+  return { result: spawnSync(argv[0], argv.slice(1), { cwd: verifyCwd, encoding: 'utf8', timeout, shell: false }), cwd: verifyCwd };
+}
+
 function doPropose({ flags, cwd }) {
   if (!flags.file || !flags.find || !flags.new || !flags.verify) {
     process.stderr.write('usage: bizar improve propose --file <path> --find <substr> --new <text> --verify <cmd> [--reason <why>]\n');
     process.exit(2);
   }
   const { abs, bytes } = readCurrentFile({ file: flags.file, cwd });
+  const argv = parseSimpleArgv(flags.verify);
   const proposal = {
     id: newProposalId({ targetFile: abs, cwd }),
     targetFile: abs,
     originalSha256: sha256Text(bytes),
     find: flags.find,
     newText: flags.new,
-    verification: { command: flags.verify, cwd, expectedExitCode: 0 },
+    verification: { command: flags.verify, argv, cwd, expectedExitCode: 0 },
     rollbackPlan: { kind: 'replace-back', note: `Reverse the find/newText swap on ${abs}` },
     reason: String(flags.reason ?? '(no reason supplied)'),
     createdAt: new Date().toISOString(),
@@ -218,12 +256,7 @@ function doRun({ flags, cwd }) {
   writeFileSync(abs, plan.newBytes, { mode: statSync(abs).mode & 0o777 });
 
   // Verify.
-  const verifyCwd = proposal.verification.cwd || cwd;
-  const verify = spawnSync('sh', ['-c', proposal.verification.command], {
-    cwd: verifyCwd,
-    encoding: 'utf8',
-    timeout: Number(proposal.verification.timeoutMs) || 60_000,
-  });
+  const { result: verify, cwd: verifyCwd } = runVerification(proposal.verification, cwd);
   const verifyExit = verify.status ?? -1;
   const verifyStdoutSha = sha256Text(verify.stdout ?? '');
   const verifyStderrSha = sha256Text(verify.stderr ?? '');
@@ -245,6 +278,7 @@ function doRun({ flags, cwd }) {
       rolledBackSha256: rollback.kind === 'replace-back' ? sha256Text(rollback.newBytes) : null,
       verification: {
         command: proposal.verification.command,
+        argv: proposal.verification.argv,
         cwd: verifyCwd,
         exitCode: verifyExit,
         stdoutSha256: verifyStdoutSha,
@@ -268,6 +302,7 @@ function doRun({ flags, cwd }) {
     afterSha256: summary.afterSha256,
     verification: {
       command: proposal.verification.command,
+      argv: proposal.verification.argv,
       cwd: verifyCwd,
       exitCode: verifyExit,
       stdoutSha256: verifyStdoutSha,
@@ -286,11 +321,7 @@ function doVerify({ flags, cwd }) {
   }
   const proposalPath = isAbsolute(flags.proposal) ? flags.proposal : resolve(cwd, flags.proposal);
   const proposal = validateProposal(JSON.parse(readFileSync(proposalPath, 'utf8')));
-  const verify = spawnSync('sh', ['-c', proposal.verification.command], {
-    cwd: proposal.verification.cwd || cwd,
-    encoding: 'utf8',
-    timeout: Number(proposal.verification.timeoutMs) || 60_000,
-  });
+  const { result: verify } = runVerification(proposal.verification, cwd);
   process.stdout.write(JSON.stringify({
     ok: (verify.status ?? -1) === (proposal.verification.expectedExitCode ?? 0),
     exitCode: verify.status ?? -1,

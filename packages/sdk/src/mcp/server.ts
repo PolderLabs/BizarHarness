@@ -31,8 +31,8 @@
  * and compact learning summaries.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { join, resolve, relative, isAbsolute, sep } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 
@@ -64,7 +64,11 @@ export interface SdkMcpToolDef<Args = any> {
   name: string;
   description: string;
   inputSchema: unknown;
-  handler: (args: Args, extra?: unknown) => Promise<{ content: Array<{ type: "text"; text: string }> }>;
+  handler: (args: Args, extra?: unknown) => Promise<{
+    content: Array<{ type: "text"; text: string }>;
+    isError?: boolean;
+    structuredContent?: unknown;
+  }>;
   annotations?: Record<string, unknown>;
 }
 
@@ -84,10 +88,20 @@ export function defineTool<Args>(
   name: string,
   description: string,
   inputSchema: Record<string, "string" | "number" | "boolean">,
-  handler: (args: Args) => Promise<{ content: Array<{ type: "text"; text: string }> }>,
+  handler: (args: Args) => Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean; structuredContent?: unknown }>,
   annotations: Record<string, unknown> = {},
 ): SdkMcpToolDef<Args> {
-  return { name, description, inputSchema, handler, annotations };
+  return {
+    name,
+    description,
+    inputSchema: {
+      type: "object",
+      properties: Object.fromEntries(Object.entries(inputSchema).map(([key, type]) => [key, { type }])),
+      additionalProperties: false,
+    },
+    handler,
+    annotations,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -98,9 +112,11 @@ function ok(text: string) {
   return { content: [{ type: "text" as const, text }] };
 }
 function err(text: string) {
-  // MCP doesn't have an error type that bubbles — we surface errors as
-  // a structured payload so the model can react.
-  return { content: [{ type: "text" as const, text: `error: ${text}` }] };
+  return {
+    isError: true,
+    structuredContent: { code: "TOOL_CONTRACT_ERROR", message: text, retryable: false },
+    content: [{ type: "text" as const, text: `error: ${text}` }],
+  };
 }
 
 // Spawn the local `bizar` CLI with --json. Thin wrappers for the 5 agent-
@@ -165,6 +181,37 @@ const listDecisionsTool = defineTool<{ project?: string; limit?: number }>(
 
 const PLANS_DIRNAME = "plans";
 
+function safeSegment(value: unknown, label: string): string {
+  const segment = typeof value === "string" ? value : "";
+  if (!segment || segment === "." || segment === ".." || segment.includes("/") || segment.includes("\\") || segment.includes("\0")) {
+    throw new Error(`${label} must be a single path segment`);
+  }
+  return segment;
+}
+
+function resolveWithin(root: string, candidate: string): string {
+  const resolvedRoot = realpathSync(resolve(root));
+  const resolved = resolve(candidate);
+  let probe = resolved;
+  const suffix: string[] = [];
+  while (!existsSync(probe)) {
+    const parent = resolve(probe, "..");
+    if (parent === probe) break;
+    suffix.unshift(probe.slice(parent.length + 1));
+    probe = parent;
+  }
+  const canonicalProbe = realpathSync(probe);
+  const canonical = suffix.length > 0 ? join(canonicalProbe, ...suffix) : canonicalProbe;
+  const rel = relative(resolvedRoot, canonical);
+  if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) {
+    throw new Error("path escapes the configured root");
+  }
+  if (existsSync(resolved) && lstatSync(resolved).isSymbolicLink()) {
+    throw new Error("symlink targets are not allowed");
+  }
+  return resolved;
+}
+
 function findRepoRoot(): string {
   let dir = process.cwd();
   for (let i = 0; i < 6; i++) {
@@ -183,7 +230,8 @@ const planActionTool = defineTool<{ slug: string; action: "read" | "list" | "cre
   async ({ slug, action, body, comment }) => {
     try {
       const root = findRepoRoot();
-      const dir = join(root, PLANS_DIRNAME, slug);
+      const safeSlug = action === "list" ? "" : safeSegment(slug, "slug");
+      const dir = resolveWithin(root, join(root, PLANS_DIRNAME, safeSlug));
       if (action === "list") {
         if (!existsSync(dir)) return ok("no_plans");
         return ok(readdirSync(dir).join("\n"));
@@ -247,7 +295,7 @@ const loopStatusTool = defineTool<{ name: string }>(
   { name: "string" },
   async ({ name }) => {
     try {
-      const fp = join(LOOPS_DIR, name, "state.json");
+      const fp = resolveWithin(LOOPS_DIR, join(LOOPS_DIR, safeSegment(name, "name"), "state.json"));
       if (!existsSync(fp)) return err(`not_found: ${name}`);
       return ok(readFileSync(fp, "utf-8"));
     } catch (e) { return err(String(e)); }
@@ -261,7 +309,7 @@ const loopStartTool = defineTool<{ name: string; prompt: string; intervalMs?: nu
   { name: "string", prompt: "string", intervalMs: "number", maxIterations: "number" },
   async ({ name, prompt, intervalMs, maxIterations }) => {
     try {
-      const dir = join(LOOPS_DIR, name);
+      const dir = resolveWithin(LOOPS_DIR, join(LOOPS_DIR, safeSegment(name, "name")));
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, "state.json"), JSON.stringify({
         name, prompt,
@@ -281,7 +329,7 @@ const loopStopTool = defineTool<{ name: string }>(
   { name: "string" },
   async ({ name }) => {
     try {
-      const fp = join(LOOPS_DIR, name, "state.json");
+      const fp = resolveWithin(LOOPS_DIR, join(LOOPS_DIR, safeSegment(name, "name"), "state.json"));
       if (!existsSync(fp)) return err(`not_found: ${name}`);
       const st = JSON.parse(readFileSync(fp, "utf-8")) as Record<string, unknown>;
       st.status = "stopped";

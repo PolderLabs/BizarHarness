@@ -104,6 +104,9 @@ export async function run(name, args, isHelpRequest) {
     return true;
   }
   if (subcommand !== 'start') { usage(); return false; }
+  if (process.env.AO_SESSION_ID || process.env.AO_PROJECT_ID) {
+    throw new Error('AO_OWNED_OPERATION: bizar worker start is disabled inside an Agent Orchestrator worker; request AO coordination instead');
+  }
   const parsed = parseStart(args.slice(1));
   const plan = buildWorkerPlan({ repoRoot: process.cwd(), ...parsed });
   mkdirSync(workerRoot(), { recursive: true, mode: 0o700 });

@@ -14,7 +14,7 @@ Bizar previously split live progression across a feature ledger, `PROGRESS.md`, 
 3. Bizar retains Claude Code orchestration, hooks, agent metadata, bounded session handoff, and control messages. It never imports or forks OpenKan storage.
 4. Session hooks, control snapshots, workflow cleanup, and the progress guard read `.ok/`. The legacy feature list, `PROGRESS.md`, and Bizar SQLite task ledger are historical compatibility artifacts, not live state.
 5. The OpenKan runtime probe is required after installation so a partial OpenKan install fails visibly rather than creating a second Bizar state store.
-6. The OpenKan installer (`bizar openkan install`, also run as part of `bizar install`) installs the published `@polderlabs/openkan@latest` package with npm into Bizar's managed OpenKan home. Npm lifecycle scripts stay disabled; Bizar explicitly runs the package-owned agent/skill installer after verifying the package layout. No remote shell script executes on the operator's machine.
+6. The OpenKan installer (`bizar openkan install`, also run as part of `bizar install`) installs the compatibility-tested `@polderlabs/openkan@0.5.0` package with npm into Bizar's managed OpenKan home. Npm lifecycle scripts stay disabled; Bizar explicitly runs the package-owned agent/skill installer after verifying the package layout. No remote shell script executes on the operator's machine.
 
 ## Consequences
 

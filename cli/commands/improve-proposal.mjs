@@ -37,7 +37,7 @@ import { createHash } from 'node:crypto';
  *   originalSha256: string,
  *   find: string,
  *   newText: string,
- *   verification: { command: string, cwd?: string, timeoutMs?: number, expectedExitCode?: number },
+ *   verification: { command?: string, argv?: string[], cwd?: string, timeoutMs?: number, expectedExitCode?: number },
  *   rollbackPlan: { kind: 'replace-back', note: string } | { kind: 'manual', note: string, manualCommand?: string },
  *   reason: string,
  *   createdAt: string,
@@ -98,8 +98,16 @@ export function validateProposal(raw) {
   if (raw.find === raw.newText) {
     throw new TypeError('Proposal.newText must differ from Proposal.find');
   }
-  if (typeof raw.verification !== 'object' || typeof raw.verification.command !== 'string' || raw.verification.command.length === 0) {
-    throw new TypeError('Proposal.verification.command must be a non-empty string');
+  if (typeof raw.verification !== 'object'
+    || (!Array.isArray(raw.verification.argv) && (typeof raw.verification.command !== 'string' || raw.verification.command.length === 0))) {
+    throw new TypeError('Proposal.verification requires a non-empty argv array or command string');
+  }
+  if (Array.isArray(raw.verification.argv)
+    && (raw.verification.argv.length === 0 || raw.verification.argv.some((arg) => typeof arg !== 'string' || arg.length === 0))) {
+    throw new TypeError('Proposal.verification.argv must contain non-empty strings');
+  }
+  if (typeof raw.verification.command === 'string' && /(?:^|[^\\])(?:;|&&|\|\||`|\$\()/.test(raw.verification.command) && !Array.isArray(raw.verification.argv)) {
+    throw new TypeError('Proposal.verification.command contains shell syntax; use verification.argv');
   }
   if (typeof raw.rollbackPlan !== 'object' || (raw.rollbackPlan.kind !== 'replace-back' && raw.rollbackPlan.kind !== 'manual')) {
     throw new TypeError('Proposal.rollbackPlan.kind must be "replace-back" or "manual"');

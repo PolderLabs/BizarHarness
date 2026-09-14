@@ -31,6 +31,7 @@
  *   const r = await runDoctor({ silent: true });
  */
 import chalk from 'chalk';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -228,6 +229,24 @@ async function checkLegacyRouterPresent() {
   return `legacy model-router.json present at ${routerPath} — safe to delete (no Bizar runtime reads it)`;
 }
 
+async function checkOwnershipManifest() {
+  const path = join(bizarHome(), 'ownership.json');
+  if (!existsSync(path)) return 'ownership manifest missing (run bizar update to create it)';
+  const manifest = JSON.parse(readFileSync(path, 'utf8'));
+  if (manifest.schema !== 'bizar.install-ownership.v1' || !manifest.files || typeof manifest.files !== 'object') {
+    throw new Error('ownership manifest has an unsupported schema');
+  }
+  const stale = Object.entries(manifest.files).filter(([file, meta]) => !existsSync(file) || (meta?.sha256 && hashFile(file) !== meta.sha256));
+  if (stale.length) return `ownership manifest has ${stale.length} stale entries`;
+  return `${Object.keys(manifest.files).length} manifest-owned files verified`;
+}
+
+function hashFile(path) {
+  try {
+    return createHash('sha256').update(readFileSync(path)).digest('hex');
+  } catch { return null; }
+}
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 const CHECKS = [
@@ -246,6 +265,7 @@ const CHECKS = [
   { name: 'openkan-runtime',           run: checkOpenKanRuntime },
   { name: 'alias-map',                 run: checkAliasMap },
   { name: 'legacy-router',             run: checkLegacyRouterPresent },
+  { name: 'ownership-manifest',        run: checkOwnershipManifest },
 ];
 
 export async function runDoctor(opts = {}) {

@@ -44,6 +44,7 @@ export interface KnownGoodRelease {
    * provenance, and signature checks. Used for releases where the
    * operator key ceremony was explicitly waived.
    */
+  /** Legacy catalogue metadata; unsigned entries are never accepted. */
   readonly unsigned?: boolean;
 }
 
@@ -64,7 +65,8 @@ const BIZAR_RELEASE_PUBKEY_10_18_0 =
  * The single current release key id. Future releases with a
  * rotated key add a new entry and update this constant.
  */
-export const CURRENT_RELEASE_KEY_ID = "b1zar0a8300";
+// Minisign key IDs are eight binary bytes represented as sixteen hex chars.
+export const CURRENT_RELEASE_KEY_ID = "62317a6172306138";
 
 /**
  * The pinned allowlist. New releases append at the bottom. Never
@@ -202,7 +204,7 @@ export function verifyRelease(input: VerifyReleaseInput): VerifyReleaseResult {
   }
 
   const tarballHash = sha256Hex(input.tarballBytes);
-  if (!pinned.unsigned && tarballHash !== pinned.tarballSha256) {
+  if (tarballHash !== pinned.tarballSha256) {
     return {
       ok: false,
       reason: "TARBALL_HASH_MISMATCH",
@@ -210,21 +212,8 @@ export function verifyRelease(input: VerifyReleaseInput): VerifyReleaseResult {
     };
   }
 
-  // Unsigned releases: the operator explicitly waived the minisig
-  // ceremony. The verify-release contract degrades to "version is
-  // pinned in the allowlist". The tarball sha256, SBOM, provenance
-  // attestation, and minisig signature are NOT checked because the
-  // in-tarball pin can never converge with the iterative build/pack
-  // loop (the pin string is part of the published tarball, so any
-  // pin update shifts the tarball sha). The gitSha + releasedAt
-  // are returned for audit traceability.
   if (pinned.unsigned) {
-    return {
-      ok: true,
-      version: pinned.version,
-      gitSha: pinned.gitSha,
-      minisignKeyId: "unsigned",
-    };
+    return { ok: false, reason: "SIGNATURE_INVALID", detail: "unsigned releases are not installable; publish a signed artifact set" };
   }
 
   const sbomHash = sha256Hex(Buffer.from(input.sbomJson, "utf8"));

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/bizar-banner.svg" alt="Bizar: guarded autonomy for Agent Orchestrator" width="100%" />
+<img src="docs/assets/bizar-banner.svg" alt="Bizar: maximum autonomy for Agent Orchestrator" width="100%" />
 
 [![npm](https://img.shields.io/npm/v/%40polderlabs%2Fbizar?color=0f766e&label=npm)](https://www.npmjs.com/package/@polderlabs/bizar)
 [![license](https://img.shields.io/badge/license-MIT-0f172a)](LICENSE)
@@ -9,7 +9,7 @@
 ![OmniRoute routing](https://img.shields.io/badge/routing-OmniRoute-0ea5e9)
 [![Standalone planning](https://img.shields.io/badge/standalone%20planning-OpenKan-f59e0b)](https://www.npmjs.com/package/@polderlabs/openkan)
 
-### Guarded autonomy for Agent Orchestrator workers
+### Maximum autonomy for Agent Orchestrator workers
 
 Run focused Codex workers under Agent Orchestrator. Bizar supplies their
 repository policy, guardrails, skills, and verification evidence.
@@ -27,9 +27,10 @@ each worker's implementation and verification discipline explicit. AO owns
 multi-agent coordination, worktrees, branches, PR/review/CI feedback, previews,
 and browser state; Bizar does not duplicate those surfaces.
 
-It keeps the operator in control of model selection and high-impact actions.
-AO model choices live in the registered project's AO configuration. Standalone
-Claude aliases live in the global Claude configuration.
+It records evidence and rollback context for high-impact actions while keeping
+execution autonomous by default. AO model choices live in the registered
+project's AO configuration. Standalone Claude aliases live in global Claude
+configuration.
 
 | You want | Bizar provides |
 | --- | --- |
@@ -176,10 +177,10 @@ risk. It does not create parallel workers merely to look busy.
 | --- | --- |
 | Research, planning, implementation, review, verification | Architecture, accessibility, security, tests, documentation, performance, build repair, operations, and domain analysis |
 
-## Guardrails that stay out of the way
+## Evidence that stays in the loop
 
-Bizar is designed to be autonomous for local, reversible work and deliberate
-for consequential actions.
+Bizar executes valid operations autonomously and records stronger evidence and
+rollback context when the effect is consequential.
 
 | Category | Default behavior |
 | --- | --- |
@@ -187,12 +188,12 @@ for consequential actions.
 | Parallel code changes | Uses isolated worktrees and scoped task ownership |
 | Ambiguous material design choice | Asks one concise clarification before execution |
 | Commit | Locally allowed, with a fresh simplify review reminder |
-| Push, PR mutation, release, publish, deploy | Requires an explicit human decision |
-| Rebase, force-push, broad destructive commands | Denied or escalated by the safety floor |
+| Push, PR mutation, release, publish, deploy | Executes when requested and contract-valid; records evidence |
+| Rebase, force-push, broad destructive commands | Executes when requested and contract-valid; advisory context only |
 
-The goal is not to make Claude Code timid. It is to make its boundaries clear:
-Bizar works through local implementation and verification, then stops at the
-point where an external or difficult-to-reverse decision belongs to you.
+The goal is clear request fidelity: invalid targets, schemas, signatures, and
+lifecycle states fail deterministically, while explicit operator restrictions
+remain binding.
 
 ## What gets installed
 

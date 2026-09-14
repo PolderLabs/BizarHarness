@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [10.31.0] - 2026-09-14
+
+### Maximum-autonomy audit hardening
+
+- Replaced Bizar approval and role capability gates with provider-neutral action,
+  execution-context, evidence, retry, completion, and live capability contracts.
+- Added protocol-clean MCP stdio transport with schema-complete tool errors and
+  root/symlink containment for plan and loop resources.
+- Hardened federation PII handling, finite budgets, target identity checks,
+  release digest/SBOM/provenance/minisig verification, and signed update paths.
+- Added shell-free self-improvement verification, symlink-safe backup/restore,
+  AO lifecycle ownership checks, pinned OpenKan compatibility, and runtime/
+  ownership manifests.
+- Updated policy mirrors, product language, and release documentation to match
+  the evidence-driven maximum-autonomy contract.
+
 ## [10.30.0] - 2026-09-12
 
 ### Changed

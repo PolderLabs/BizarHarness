@@ -160,6 +160,9 @@ export * from "./autonomy/index.js";
 // Audit #83 — Release provenance: SBOM, SLSA attestation, signature.
 export * from "./release/index.js";
 
+// Federation envelope, PII, trust, policy, and budget contracts.
+export * from "./federation/index.js";
+
 // Audit #85 — Efficiency benchmarks + auto-fan-out reduction.
 export * from "./bench/index.js";
 
@@ -172,5 +175,8 @@ export * from "./ambiguity/index.js";
 export * from "./handoff/bizplan.js";
 export { bizplan_mcp, bizplan_tools } from "./mcp/bizplan.js";
 export * from "./specs/deep-interview.js";
+
+// Provider-neutral action, execution-context, completion, and capability contracts.
+export * from "./policy/index.js";
 
 export { SDK_VERSION } from "./version.js";

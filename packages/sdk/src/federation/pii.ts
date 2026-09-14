@@ -166,7 +166,7 @@ export function apply(
   for (const entry of PATTERNS) {
     const regex = new RegExp(entry.pattern.source, entry.pattern.flags);
     let m: RegExpExecArray | null;
-    while ((m = regex.exec(transformed)) !== null) {
+    while ((m = regex.exec(text)) !== null) {
       detections.push({
         category: entry.category,
         value: m[0],
@@ -176,8 +176,10 @@ export function apply(
     }
   }
 
-  // Now compute actions per category. `block` short-circuits the
-  // whole transform but we still report every detection.
+  // Compute actions before mutating. Applying all replacements in one
+  // reverse-offset pass prevents earlier replacements from invalidating
+  // offsets for later categories.
+  const replacements: Array<{ offset: number; length: number; value: string }> = [];
   for (const entry of PATTERNS) {
     const inCategory = detections.filter((d) => d.category === entry.category);
     if (inCategory.length === 0) continue;
@@ -190,20 +192,23 @@ export function apply(
     }
     if (action === "pass") continue;
 
-    // Apply right-to-left so earlier offsets remain valid.
-    for (const hit of inCategory.reverse()) {
+    for (const hit of inCategory) {
       const replacement =
         action === "redact"
           ? REDACT_TOKEN(entry.category)
           : `[HASH:${deterministicHash(hit.value, salt).slice(0, HASH_PREFIX)}]`;
-      transformed =
-        transformed.slice(0, hit.offset) +
-        replacement +
-        transformed.slice(hit.offset + hit.value.length);
+      replacements.push({ offset: hit.offset, length: hit.value.length, value: replacement });
     }
   }
 
   if (blocked) transformed = "";
+  else {
+    for (const replacement of replacements.sort((a, b) => b.offset - a.offset)) {
+      transformed = transformed.slice(0, replacement.offset)
+        + replacement.value
+        + transformed.slice(replacement.offset + replacement.length);
+    }
+  }
 
   return {
     transformed,

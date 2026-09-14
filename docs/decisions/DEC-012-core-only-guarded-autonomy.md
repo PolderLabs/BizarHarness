@@ -1,5 +1,8 @@
 # DEC-012 — Core-only guarded autonomy
 
+> Superseded by `docs/decisions/AUTONOMY_CONTRACT.md` (2026-09-14). Retained
+> for historical traceability only.
+
 **Status:** Accepted
 **Date:** 2026-07-30
 

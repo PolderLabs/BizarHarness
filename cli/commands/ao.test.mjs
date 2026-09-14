@@ -48,9 +48,9 @@ test('configuredProjectConfig preserves unrelated AO configuration', () => {
 
   assert.equal(next.env.KEEP, 'yes');
   assert.equal(next.autoReview, true);
-  assert.equal(next.worker.agent, 'codex');
+  assert.equal(next.worker.agent, 'claude-code');
   assert.equal(next.worker.agentConfig.mode, 'tui');
-  assert.equal(next.orchestrator.agent, 'codex');
+  assert.equal(next.orchestrator.agent, 'claude-code');
   assert.equal(next.agentRulesFile, AO_RULES_FILE);
   assert.equal(next.agentConfig.model, 'gpt-5.6');
   assert.equal(next.agentConfig.permissions, 'accept-edits');

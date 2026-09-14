@@ -25,7 +25,7 @@
  * The private key is operator-held. The CLI never persists it.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -49,8 +49,9 @@ export const USAGE = `
     --package-json <path> Root package.json (default: ./package.json).
     --sdk-package-json <path> SDK package.json (default: ./packages/sdk/package.json).
     --private-key <path>  PEM-encoded ed25519 private key. If omitted, the
-                          signature blob is generated with a deterministic
-                          test key so the operator can verify the layout.
+                          an ephemeral fixture key is generated and returned
+                          for tests; production releases must provide one.
+    --tarball <path>      Exact artifact bytes to bind to provenance/signature.
     --git-sha <sha>       Override the git sha (default: read from git rev-parse HEAD).
     --quiet               Suppress progress output.
 
@@ -87,16 +88,17 @@ function minisignEncode(sigB64, trustedComment = `signed by bizar ${CURRENT_RELE
     `untrusted comment: ${untrustedComment}`,
     sigB64,
     `trusted comment: ${trustedComment}`,
-    Buffer.from(trustedComment, 'utf8').toString('base64'),
+    Buffer.from(`trusted comment: ${trustedComment}\n`, 'utf8').toString('base64'),
     '',
   ].join('\n');
 }
 
-function deterministicTestKey() {
-  // Pure-JS test key — generates a valid signature so the layout is
-  // verifiable end-to-end. Operators MUST replace this with a
-  // private key they control via --private-key.
-  return Buffer.from('not-a-real-key', 'utf8').toString('base64').slice(0, 44);
+function ephemeralSigningKey() {
+  const pair = generateKeyPairSync('ed25519');
+  return {
+    privateKeyPem: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    publicKeyPem: pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+  };
 }
 
 /**
@@ -115,6 +117,8 @@ export function buildReleaseArtifacts({
   privateKeyPem,
   outDir,
   timestamp,
+  artifactBytes,
+  artifactName,
 }) {
   const sdkName = sdkPackageJson.name;
   const sdkVersion = sdkPackageJson.version;
@@ -142,9 +146,11 @@ export function buildReleaseArtifacts({
   // Use the SBOM as the artifact for provenance + signing so the
   // signed payload IS the SBOM. Operators can also sign the
   // tarball — adjust the `subject.name` accordingly.
+  const signedArtifact = artifactBytes ?? sbomBytes;
+  const signedArtifactSha256 = createHash('sha256').update(signedArtifact).digest('hex');
   const statement = buildProvenanceAttestation({
-    artifactName: `${rootPackageJson.name}-${version}.sbom.cdx.json`,
-    artifactSha256: sbomSha256,
+    artifactName: artifactName ?? `${rootPackageJson.name}-${version}.tgz`,
+    artifactSha256: signedArtifactSha256,
     version,
     gitSha,
     materialUri: `git+https://github.com/DrB0rk/BizarHarness@${gitSha}`,
@@ -154,20 +160,24 @@ export function buildReleaseArtifacts({
   const provenanceJsonl = JSON.stringify(statement) + '\n';
   const provenanceSha256 = createHash('sha256').update(provenanceJsonl, 'utf8').digest('hex');
 
-  // Signature: ed25519 over the SBOM. The keyId is the
-  // CURRENT_RELEASE_KEY_ID (8 ASCII bytes). When --private-key is
-  // omitted, we fall back to a deterministic test signature so
-  // operators can still see the layout.
-  const message = sbomBytes;
-  const keyId = Buffer.from(CURRENT_RELEASE_KEY_ID, 'utf8').subarray(0, 8);
+  // Signature: ed25519 over the exact artifact bytes. Production callers
+  // provide a private key; the generated key fallback is explicit and
+  // returns its public key so fixtures remain interoperable and auditable.
+  const trustedComment = `signed by bizar ${CURRENT_RELEASE_KEY_ID} sha256=${signedArtifactSha256}`;
+  // Minisign authenticates the trusted-comment envelope. Keep the exact
+  // bytes identical to the verifier so generated fixtures are interoperable.
+  const message = Buffer.from(`trusted comment: ${trustedComment}\n`, 'utf8');
+  const keyId = Buffer.from(CURRENT_RELEASE_KEY_ID, 'hex').subarray(0, 8);
   let sigB64;
+  let signingPublicKeyPem = null;
   if (privateKeyPem) {
     sigB64 = signWithEd25519(message, privateKeyPem, keyId);
   } else {
-    // Deterministic test signature — keeps the layout byte-stable.
-    sigB64 = deterministicTestKey();
+    const ephemeral = ephemeralSigningKey();
+    sigB64 = signWithEd25519(message, ephemeral.privateKeyPem, keyId);
+    signingPublicKeyPem = ephemeral.publicKeyPem;
   }
-  const minisigText = minisignEncode(sigB64);
+  const minisigText = minisignEncode(sigB64, trustedComment);
 
   mkdirSync(outDir, { recursive: true, mode: 0o700 });
   const sbomPath = join(outDir, `${version}.sbom.cdx.json`);
@@ -189,6 +199,8 @@ export function buildReleaseArtifacts({
     outDir,
     sdkName,
     sdkVersion,
+    signedArtifactSha256,
+    signingPublicKeyPem,
   };
 }
 
@@ -231,6 +243,7 @@ export async function run(subargs) {
   const privateKeyPem = flags['private-key']
     ? readFileSync(String(flags['private-key']), 'utf8')
     : null;
+  const artifactBytes = flags.tarball ? readFileSync(String(flags.tarball)) : undefined;
 
   const artifacts = buildReleaseArtifacts({
     version,
@@ -238,6 +251,8 @@ export async function run(subargs) {
     sdkPackageJson: sdkPkg,
     gitSha,
     privateKeyPem,
+    artifactBytes,
+    artifactName: flags.tarball ? `${rootPkg.name}-${version}.tgz` : undefined,
     outDir,
   });
 

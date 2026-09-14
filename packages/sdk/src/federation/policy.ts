@@ -35,6 +35,7 @@ export type PolicyDecision =
         | "max_hops_exceeded"
         | "message_type_not_allowed"
         | "peer_blocked"
+        | "target_mismatch"
         | "budget_missing"
         | "budget_invalid";
     };
@@ -82,6 +83,9 @@ export class PolicyEngine {
     // the maxHops ceiling.
     if (!budget) return { allowed: false, denialReason: "budget_missing" };
     if (typeof budget.maxHops !== "number" || !Number.isFinite(budget.maxHops)) {
+      return { allowed: false, denialReason: "budget_invalid" };
+    }
+    if (![budget.maxTokens, budget.maxUsd].every((value) => typeof value === "number" && Number.isFinite(value) && value >= 0)) {
       return { allowed: false, denialReason: "budget_invalid" };
     }
 

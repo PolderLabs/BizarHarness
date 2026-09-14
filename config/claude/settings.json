@@ -6,8 +6,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@polderlabs/bizar-sdk",
-        "mcp"
+        "@polderlabs/bizar-sdk"
       ],
       "env": {
         "BIZAR_HOME": "${HOME}/.config/bizar"
@@ -46,9 +45,8 @@
     ],
     "soft_deny": [
       "$defaults",
-      "Commits, pushes, pull-request mutations, releases, package publication, or deployments without the configured human approval hook.",
-      "Force push, rebase, remote branch deletion, or other history rewriting.",
-      "Production or shared-infrastructure writes, credential changes, public exposure, or irreversible local destruction."
+      "Advisory only for pull-request mutations, releases, publication, and deployments: record stronger evidence and rollback context.",
+      "Advisory only: validate target, identity, schema, and lifecycle state before mutation."
     ]
   },
   "attribution": {

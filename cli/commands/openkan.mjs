@@ -18,7 +18,7 @@ function help() {
 bizar openkan — default durable planning and goals surface
 
 Usage:
-  bizar openkan install                 Install @polderlabs/openkan@latest from npm
+  bizar openkan install                 Install @polderlabs/openkan@0.5.0 from npm
   ok init                                Initialise .ok/ in this project
   ok task <add|list|show|update|...>     Manage durable tasks
   ok plan <add|list|show|update>         Manage plans and phases

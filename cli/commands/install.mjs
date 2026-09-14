@@ -197,6 +197,16 @@ export async function update(args, isHelpRequest) {
     showUpdateHelp();
     return;
   }
+  const versionIndex = args.indexOf('--version');
+  if (versionIndex >= 0) {
+    const version = args[versionIndex + 1];
+    const artifactIndex = args.indexOf('--artifact-dir');
+    const artifactDir = artifactIndex >= 0 ? args[artifactIndex + 1] : undefined;
+    const { runVerifiedUpdate } = await import('../update.mjs');
+    const result = await runVerifiedUpdate(args, { artifactDir });
+    if (!result?.ok) process.exit(1);
+    return;
+  }
   // v10.19.6 — route update through the same flag-parsing + installer
   // pipeline as install so `--dry-run`, `--force`, `--yes`, etc. do
   // what they claim. See `runUpdateWithFlags` for the testable

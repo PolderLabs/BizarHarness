@@ -5,12 +5,9 @@
  * `.ok/`. Keeping this bridge subprocess-only means Bizar never imports or
  * forks OpenKan's storage implementation, and upgrades remain independent.
  *
- * The native installer (`installOpenKanPromise`) installs the latest
- * `@polderlabs/openkan` from the public npm registry via `npm install
- * --prefix <home> @polderlabs/openkan@latest`. No remote shell script
- * ever runs on the operator's machine; the version is resolved by npm
- * itself. Each `bizar openkan install` invocation resolves the latest
- * tag at call time, so Bizar tracks upstream automatically.
+ * The native installer (`installOpenKanPromise`) installs the pinned,
+ * compatibility-tested `@polderlabs/openkan` version from the public npm
+ * registry. No remote shell script ever runs on the operator's machine.
  */
 import {
   existsSync,
@@ -28,7 +25,9 @@ import { spawnSync } from 'node:child_process';
 import { resolveBizarHome, resolveClaudeConfigDir } from './config-paths.mjs';
 
 export const OPENKAN_NPM_PACKAGE = '@polderlabs/openkan';
-export const OPENKAN_NPM_VERSION_SPEC = 'latest';
+// Pin the compatibility-tested OpenKan range. A mutable @latest tag is not
+// a release contract and can silently change the installed runtime.
+export const OPENKAN_NPM_VERSION_SPEC = '0.5.0';
 export const OPENKAN_HOME_DEFAULT = join(homedir(), '.config', 'bizar', 'openkan');
 export const OPENKAN_DEFAULT_LAUNCHER = join(
   OPENKAN_HOME_DEFAULT,
@@ -424,10 +423,8 @@ export function installOpenKanCommandShims({ home, env = process.env } = {}) {
  * Native install — runs entirely inside the Bizar provisioning code path.
  *
  * Steps:
- *   1. `npm install --prefix <home> @polderlabs/openkan@latest`
- *      via `spawnSync('npm', ...)` — npm resolves `@latest` against the
- *      public registry on every call, so Bizar always tracks the newest
- *      upstream OpenKan.
+ *   1. `npm install --prefix <home> @polderlabs/openkan@${OPENKAN_NPM_VERSION_SPEC}`
+ *      via `spawnSync('npm', ...)` using the compatibility-tested version.
  *   2. Record the resolved version under `<home>/.installed-version` so
  *      operators can inspect what shipped and `bizar update` can detect
  *      drift.

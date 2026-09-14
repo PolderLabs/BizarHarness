@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, resolve } from 'node:path';
 
-export const AO_RULES_FILE = '.ao/bizar-worker-rules.md';
+export const AO_RULES_FILE = '.ao/bizar-managed-rules.md';
 export const AO_ORCHESTRATOR_RULES = 'Use AO for coordination and Bizar as the Codex worker harness. Spawn focused AO workers for implementation; workers own changes, verification, commits, and PR follow-up.';
 const WORKER_RULES_TEMPLATE = resolve(dirname(fileURLToPath(import.meta.url)), '../../config/ao/worker-rules.md');
 
@@ -28,6 +28,8 @@ export function parseAoArgs(args = []) {
     project: optionValue(args, '--project'),
     model: optionValue(args, '--model'),
     permissions: optionValue(args, '--permissions'),
+    workerAgent: optionValue(args, '--worker-agent'),
+    orchestratorAgent: optionValue(args, '--orchestrator-agent'),
     help: args.includes('--help') || args.includes('-h') || first === 'help',
   };
 }
@@ -42,8 +44,12 @@ export function defaultProjectId(cwd) {
 }
 
 export function configuredProjectConfig(current = {}, options = {}) {
-  const worker = { ...(current.worker || {}), agent: 'codex' };
-  const orchestrator = { ...(current.orchestrator || {}), agent: 'codex' };
+  const worker = { ...(current.worker || {}) };
+  const orchestrator = { ...(current.orchestrator || {}) };
+  if (!worker.agent) worker.agent = 'codex';
+  if (!orchestrator.agent) orchestrator.agent = 'codex';
+  if (options.workerAgent) worker.agent = options.workerAgent;
+  if (options.orchestratorAgent) orchestrator.agent = options.orchestratorAgent;
   const agentConfig = { ...(current.agentConfig || {}) };
   if (options.model) agentConfig.model = options.model;
   if (options.permissions) agentConfig.permissions = options.permissions;
@@ -160,7 +166,9 @@ export function setupAo(options = {}) {
   projectId ||= defaultProjectId(cwd);
 
   if (!projectDetails) {
-    const added = runAo(['project', 'add', '--path', cwd, '--id', projectId, '--worker-agent', 'codex', '--orchestrator-agent', 'codex'], options);
+    const addArgs = ['project', 'add', '--path', cwd, '--id', projectId];
+    addArgs.push('--worker-agent', options.workerAgent || 'codex', '--orchestrator-agent', options.orchestratorAgent || 'codex');
+    const added = runAo(addArgs, options);
     if (!added.ok) return added;
     const details = runAo(['project', 'get', projectId, '--json'], options);
     if (!details.ok) return details;
@@ -196,6 +204,9 @@ export function run(args = [], options = {}) {
     return true;
   }
   try {
+    if (parsed.subcommand === 'setup' && isAoSession(options.env || process.env) && !options.allowNested) {
+      throw new Error('AO_OWNED_OPERATION: AO setup cannot create competing lifecycle state from an AO worker');
+    }
     let result;
     if (parsed.subcommand === 'setup') result = setupAo({ ...options, ...parsed });
     else if (parsed.subcommand === 'doctor') result = doctorAo(options);

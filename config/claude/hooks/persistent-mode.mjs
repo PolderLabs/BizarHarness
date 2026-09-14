@@ -21,7 +21,7 @@ import { pathToFileURL } from 'node:url';
 const STAGE_INSTRUCTIONS = Object.freeze({
   research: 'Continue the research/spec stage. Gather current official documentation and repository evidence before recording a guarded transition.',
   plan: 'Continue the consensus-plan stage. Draft the plan, run adversarial review, and transition only after the plan gate has fresh evidence.',
-  execute: 'Continue the execution stage. Dispatch bounded owned scopes, integrate verified results, and preserve all hard approval boundaries.',
+  execute: 'Continue the execution stage. Dispatch bounded owned scopes, integrate verified results, and preserve explicit operator restrictions.',
   qa: 'Continue the bounded QA/fix stage. Run fresh checks, classify failures, and stay within the recorded retry ceilings.',
   validate: 'Continue multi-perspective validation. Completion requires fresh functional, policy, quality, and test evidence plus an explicit guarded transition.',
 });

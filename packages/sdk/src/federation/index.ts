@@ -30,7 +30,13 @@ import { apply, isPiiMode, type PiiMode, type PiiResult } from "./pii.js";
 import { TrustEvaluator, type PeerState } from "./trust.js";
 import { PolicyEngine, type PolicyDecision } from "./policy.js";
 import { AuditService } from "./audit.js";
-import { FederationBudget, validateBudgetInput, type PerPeerBudget } from "./budget.js";
+import {
+  FederationBudget,
+  MAX_TOKENS_CEILING,
+  MAX_USD_CEILING,
+  validateBudgetInput,
+  type PerPeerBudget,
+} from "./budget.js";
 
 // ---------------------------------------------------------------------------
 // Public re-exports
@@ -189,6 +195,16 @@ export interface ReceiveResult {
   readonly rejectionReason?: string;
 }
 
+export class FederationPiiBlockedError extends Error {
+  readonly code = "PII_BLOCKED" as const;
+  readonly detections: readonly PiiResult["detections"][number][];
+  constructor(result: PiiResult) {
+    super(`federation payload blocked by PII policy (${result.mode})`);
+    this.name = "FederationPiiBlockedError";
+    this.detections = result.detections;
+  }
+}
+
 /** Build the orchestrator handle. */
 export function createFederation(opts: CreateFederationOpts): FederationHandle {
   if (!opts || typeof opts.nodeId !== "string" || opts.nodeId.length === 0) {
@@ -212,9 +228,14 @@ export function createFederation(opts: CreateFederationOpts): FederationHandle {
   }
 
   function sign<T>(input: SignInput<T>): FederationEnvelope<T> {
-    const validated = input.budget
+  const validated = input.budget
       ? validateBudgetInput(input.budget)
-      : { ok: true as const, maxTokens: Number.POSITIVE_INFINITY, maxUsd: Number.POSITIVE_INFINITY, maxHops: 8 };
+      : {
+          ok: true as const,
+          maxTokens: MAX_TOKENS_CEILING,
+          maxUsd: MAX_USD_CEILING,
+          maxHops: 8,
+        };
     if (!validated.ok) throw new Error(`sign: bad budget: ${validated.error}`);
 
     const env: FederationEnvelope<T> = {
@@ -254,19 +275,22 @@ export function createFederation(opts: CreateFederationOpts): FederationHandle {
           reason: `pii_blocked (mode=${modeRef.value})`,
           layer: "budget",
         });
+        // Never fall back to the original payload after a hard block. A
+        // blocked secret/PII value must not be recoverable through this path.
+        throw new FederationPiiBlockedError(pii);
       }
     }
 
     const finalEnv: FederationEnvelope<T> = {
       ...env,
-      payload: (pii.transformed ? (pii.transformed as unknown as T) : input.payload),
+      payload: (input.skipPii ? input.payload : pii.transformed) as T,
       piiScanResult: pii.detections.length > 0
         ? {
             scanned: true,
             piiFound: true,
             detections: pii.detections.map((d) => ({
               type: d.category,
-              action: "redact",
+              action: pii.actionsApplied.find((action) => action.category === d.category)?.action ?? "pass",
               confidence: d.confidence,
               count: 1,
             })),
@@ -352,6 +376,16 @@ export function createFederation(opts: CreateFederationOpts): FederationHandle {
         });
       } else {
         trust.recordOutcome(envelope.sourceNodeId, true);
+        if (envelope.targetNodeId !== opts.nodeId) {
+          rejectionReason = "policy:target_mismatch";
+          audit.record({
+            ts: new Date().toISOString(), envelopeId: envelope.envelopeId,
+            sourceNodeId: envelope.sourceNodeId, targetNodeId: envelope.targetNodeId,
+            messageType: envelope.messageType, nonce: envelope.nonce,
+            allowed: false, reason: rejectionReason, layer: "policy",
+          });
+          return { trusted, policyAllowed: false, hmacValid: verifyOut.ok, pii, envelope, rejectionReason };
+        }
         // 3. Policy (hops + blocklist + message allowlist)
         const polOut: PolicyDecision = policy.enforce(envelope, envelope.budget);
         policyAllowed = polOut.allowed;
