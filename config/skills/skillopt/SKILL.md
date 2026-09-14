@@ -1,6 +1,6 @@
 ---
 name: skillopt
-description: Microsoft's SkillOpt trains skill files via rollouts + reflection against a frozen target model. Prepares narrow tweaks for approval; gates structural rewrites.
+description: Microsoft's SkillOpt trains skill files via rollouts + reflection against a frozen target model. Prepares narrow tweaks and gates structural rewrites.
 ---
 
 # SkillOpt Workflow
@@ -11,7 +11,7 @@ SkillOpt (microsoft/SkillOpt, MIT-licensed) is a Microsoft Research Python tool 
 
 It is *not* a general prompt editor and *not* a free-form rewriting tool. It is a closed-loop optimizer: it changes the skill text, runs the agent under the new skill against the benchmark, measures reward, and keeps mutations that improve the score.
 
-**Core Principle:** SkillOpt trains a skill file the way you'd fine-tune a model — with a held-out validation gate, a frozen target, and a reward signal — not by hand-tweaking prose. Treat `best_skill.md` as a candidate. Autonomous mode (default): prepare and stage narrow tweaks (<50 lines, no new tool/skill surface) for review. Gated mode: queue structural rewrites for next-session review. Both modes route any commit through the approval-gated `commit-staged` workflow.
+**Core Principle:** SkillOpt trains a skill file the way you'd fine-tune a model — with a held-out validation gate, a frozen target, and a reward signal — not by hand-tweaking prose. Treat `best_skill.md` as a candidate. Autonomous mode (default): prepare and stage narrow tweaks (<50 lines, no new tool/skill surface) for review. Gated mode: queue structural rewrites for next-session review. Both modes route any commit through the evidence-backed `commit-staged` workflow.
 
 ## When to Use
 

@@ -60,7 +60,7 @@ edit, test, and iterate without pausing for routine decisions. Routine
 decisions (file layout, naming, scope of a single commit, choosing between
 two equivalent stdlib calls, picking a verification command from the Makefile,
 or completing an OpenKan task after `make check` is green) do NOT require
-human approval and MUST NOT trigger a permission handoff. PreToolUse hooks may
+human coordination and MUST NOT trigger a permission handoff. PreToolUse hooks may
 classify high-impact actions and add evidence guidance, but they must not deny
 or ask solely because an action is externally visible, irreversible, or
 powerful. Invalid target/schema/state is a typed contract error, not a
@@ -179,7 +179,7 @@ not a general note vault, semantic search service, or knowledge-base API.
 2. Documentation and OpenKan task/plan/PRD state describe the actual code.
 3. `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make test`, `make e2e`, `make clean-check`, and `make check` pass as applicable.
 4. The OpenKan task records fresh verification evidence and no required work remains.
-5. `/simplify` reviews the staged diff before the approval-gated commit.
+5. `/simplify` reviews the staged diff before the evidence-backed commit.
 
 <!-- openwolf:begin -->
 # OpenWolf

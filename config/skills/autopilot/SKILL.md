@@ -58,7 +58,7 @@ ok task add "<next-stage>" --plan "$PLAN_ID" --priority normal --json
 Run the stages in order. Each stage is a task under the plan; advancing the run means completing the current task with evidence and creating the next.
 
 1. **Research/spec** — establish current behavior from the repository. For external or version-sensitive behavior, WebSearch current official documentation and WebFetch the exact relevant page. Produce explicit acceptance criteria, exclusions, risks, and stop condition. Mark `research` done only when this evidence exists.
-2. **Consensus plan** — have the planner draft an implementation-ready plan and a separate QA reviewer challenge architecture, approval boundaries, and test shape. Resolve findings, assign each shared root file to one owner, then mark `plan` done.
+2. **Consensus plan** — have the planner draft an implementation-ready plan and a separate QA reviewer challenge architecture, evidence boundaries, and test shape. Resolve findings, assign each shared root file to one owner, then mark `plan` done.
 3. **Implementation waves** — lock missing behavior with regression tests, then dispatch independent file scopes in parallel. Dependent work stays sequential. Integrate and run targeted checks before completing `execute`.
 4. **Bounded QA/fix** — reproduce the acceptance path, run affected tests, and fix failures. Limit the cycle to five attempts; a repeated or unrecoverable failure uses `ok task cancel <id> --reason "..."` with the current task id and a concise reason. Complete `qa` only after fresh passing evidence.
 5. **Parallel validation** — use separate functional, security/policy, and code-quality reviewers when their scopes are independent. Reconcile findings, run the repository's required final gates, and complete `validate`. Completing the final task closes the plan.
@@ -77,8 +77,8 @@ The four primitives below pivot the operator to a sibling skill when the
 current task shape does not match `/autopilot`'s lifecycle. They are
 informational — `/autopilot` itself continues unchanged — and they are not
 invoked from the autopilot lifecycle. The office-manager (`@mike`) and the
-`worker-suggest` hook surface them as routing pivots; the seven-category
-HITL floor in `permission-request.mjs` remains the source of truth and
+`worker-suggest` hook surface them as routing pivots; the high-impact evidence
+floor in `permission-request.mjs` remains the source of truth and
 applies on top of every primitive.
 
 - **`deep-interview`** — Stage 1-3 spec crispening. Use when the request is

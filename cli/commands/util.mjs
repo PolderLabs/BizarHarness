@@ -26,14 +26,13 @@ export function showInitHelp() {
   bizar init — Initialize .bizar/ in current project
 
   Usage:
-    bizar init
+    bizar init [--backend openkan|ao]
 
   Description:
-    Detects the project stack, creates .bizar/PROJECT.md and the bounded
-    project-learning directory, and installs relevant skills.
-    The per-project knowledge graph (in .bizar/graph/) is provided
-    by the graphify mod — install it from the mod registry for
-    that feature.
+    Detects the project stack, resolves exactly one work-state backend,
+    ensures OpenWolf 2.5.1, initializes .wolf/ with Claude-only hooks, and
+    installs relevant skills. Existing project memory is preserved and legacy
+    Bizar lessons migrate once into OpenWolf cerebrum.
   `);
 }
 
@@ -73,7 +72,7 @@ export function showDoctorHelp() {
   bizar doctor — Check the BizarHarness install for health issues
 
   Usage:
-    bizar doctor
+    bizar doctor [--deep-memory]
 
   Description:
     Runs a battery of health checks against the local install:
@@ -215,7 +214,9 @@ export async function run(name, args, isHelpRequest) {
       if (isHelpRequest) showInitHelp();
       else {
         const { runInit } = await import('../init.mjs');
-        await runInit(process.cwd());
+        const backendIndex = args.findIndex((arg) => arg === '--backend' || arg === '--execution-backend');
+        const executionBackend = backendIndex >= 0 ? args[backendIndex + 1] : undefined;
+        await runInit(process.cwd(), { executionBackend });
       }
       break;
 
@@ -239,7 +240,7 @@ export async function run(name, args, isHelpRequest) {
       else {
         const wantJson = args.includes('--json');
         const { runDoctor } = await import('../doctor.mjs');
-        const result = await runDoctor({ silent: wantJson, json: wantJson });
+        const result = await runDoctor({ silent: wantJson, json: wantJson, deepMemory: args.includes('--deep-memory') });
         if (wantJson) process.stdout.write(JSON.stringify(result) + '\n');
         if (result.failed > 0) process.exit(1);
       }

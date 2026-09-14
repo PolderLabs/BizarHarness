@@ -37,11 +37,12 @@ describe('/plow-through command file', () => {
     assert.ok(lines.length > 5, `body should have content, got ${lines.length} non-empty lines`);
   });
 
-  test('body contains autonomous-mode contract keywords', () => {
+  test('body contains the direct-capability execution contract', () => {
     const content = readFileSync(CMD_PATH, 'utf8');
     const body = content.replace(/^---[\s\S]*?---\n/, '');
     const lower = body.toLowerCase();
-    assert.ok(lower.includes('agent team'), 'body must state the default agent-team method');
+    assert.ok(lower.includes('direct execution') || lower.includes('direct-capability'), 'body must state the direct default');
+    assert.ok(lower.includes('delegate') && lower.includes('independent'), 'body must describe value-positive delegation');
     assert.ok(lower.includes('clarifying') || lower.includes('orientation'), 'body must describe how ambiguity is handled');
     assert.ok(lower.includes('work to completion') || lower.includes('complete'), 'body must state work-to-completion');
   });

@@ -44,13 +44,13 @@ describe('prompt-trim v10.20.0', () => {
     assert.ok(lines <= 300, `office-manager.md is ${lines} lines, must be <= 300`);
   });
 
-  test('office-manager defaults substantive work to teams and clarifies only when needed', () => {
+  test('office-manager defaults to direct capability and delegates for measurable value', () => {
     const source = readFileSync(OFFICE_MANAGER, 'utf8');
     const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
     assert.match(frontmatter, /^tools:.*\bWorkflow\b/m);
     assert.match(frontmatter, /^tools:.*\bAskUserQuestion\b/m);
-    assert.match(source, /native Agent team/);
-    assert.match(source, /Ask one concise clarification question only/);
+    assert.match(source, /direct execution using the capabilities already/);
+    assert.match(source, /delegate only when independent parallelism/);
     assert.match(source, /isolation: "worktree"/);
   });
 

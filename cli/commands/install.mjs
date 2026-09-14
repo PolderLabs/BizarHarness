@@ -24,11 +24,10 @@ export function showInstallHelp() {
   Usage:
     bizar install                       Install (or refresh) every component
     bizar install --dry-run             Print what would happen, change nothing
-    bizar install --force               Full clean install: wipe Bizar-managed dirs,
-                                        back up settings env vars, re-sync everything
-                                        from the repo. Preserves ~/.config/bizar/
-                                        login state. Combine with --yes to skip prompts.
-    bizar install --deep                Alias for --force (clean-install semantics)
+    bizar install --force               Repair Bizar-owned files from the ownership ledger.
+    bizar install --really-reset-global-claude-config
+                                        Explicit emergency reset of the global Claude config.
+    bizar install --deep                Alias for --force (ownership-safe repair)
     bizar install --yes                 Non-interactive install (CI/script friendly)
     bizar install --non-interactive     Alias for --yes
     bizar install --help                Show this help
@@ -38,8 +37,9 @@ export function showInstallHelp() {
     difference is just mode=install vs mode=update. Every step is
     idempotent — running this twice is safe.
 
-    F-183 (v10.16.2+) — --force promotes the install from
-    overwrite+prune-stale to a fully clean install. It wipes:
+    Ownership-safe repair means --force removes/replaces only unchanged files
+    recorded by Bizar. It preserves user and third-party siblings. The explicit
+    emergency flag is the only path that wipes:
       - ~/.claude/{agents,skills,commands,hooks,rules,workflows,plugins}/
       - ~/.agents/ (shared skill-registry + lock)
       - ~/.claude/settings.json (env vars backed up to BIZAR_SAVED_ENV)
@@ -69,7 +69,8 @@ export function showInstallHelp() {
        URL and key only when they are not already configured. Fresh setups
        can also choose a default model, agent teams, OpenKan home, and whether
        to initialise the current project's .ok/ workspace.
-    9. Runs 'bizar doctor' as a post-install health check.
+    9. Required invariants are checked during provisioning; use 'bizar doctor'
+       explicitly for the full diagnostic.
 
     Provider settings are global (~/.claude/settings.json), so they work from
     every project. Key input is hidden. Use --yes or --non-interactive to skip
@@ -86,9 +87,8 @@ export function showUpdateHelp() {
   Usage:
     bizar update                       Refresh every Bizar-managed surface
     bizar update --dry-run             Print what would happen, change nothing
-    bizar update --force | --deep      Full clean re-emit: wipe Bizar-managed
-                                        dirs, back up settings env vars,
-                                        re-sync everything from the repo
+    bizar update --force | --deep      Ownership-safe repair of Bizar-managed
+                                        files from the ledger
     bizar update --yes | -y            Assume yes for any non-destructive prompt
     bizar update --non-interactive     Alias for --yes
     bizar update --help                Show this help
@@ -100,18 +100,15 @@ export function showUpdateHelp() {
     1. Ensures the bundled default OpenKan planning runtime is present and current.
     2. Re-emits skills, commands, rules, hooks, agents, and workflows
        from the repo source into ~/.claude/ (or $CLAUDE_CONFIG_DIR),
-       overwriting only the Bizar-managed surface and pruning stale
-       entries (F-141).
+       overwriting only the Bizar-managed surface and pruning unchanged
+       ledger-owned stale entries.
     3. Writes the install marker so subsequent runs short-circuit when
        nothing has changed.
-    4. With --force, re-runs the F-183 clean-install flow: wipes
-       ~/.claude/{agents,skills,commands,hooks,rules,workflows,plugins}/
-       and ~/.agents/, stashes the prior settings.json env block into
-       BIZAR_SAVED_ENV, then re-emits settings.json with the operator's
-       ANTHROPIC_* and BIZAR_* keys union-merged back in (so gateway
-       URL, auth token, and BIZAR_HOME are preserved across the wipe).
-    5. Runs 'bizar doctor' after a successful update so config
-       regressions surface before the next Claude Code session.
+    4. With --force, repairs only unchanged files recorded in the ownership
+       ledger. The emergency global reset option is intentionally documented
+       on bizar install, not routine updates.
+    5. Runs the narrow installer invariants; use 'bizar doctor' for the full
+       diagnostic when needed.
     6. Repairs stale bin symlinks so the operator picks up the new code
        on the next shell prompt.
 
@@ -150,13 +147,19 @@ export function showUpdateHelp() {
 async function runPostInstallerRepair({ runRepair: runRepairDep = runRepair } = {}) {
   try {
     const r = await runRepairDep({});
+    if (r?.ok === false) {
+      console.error(chalk.red(`  ✗ Repair failed: ${(r?.notes || []).join(' ') || 'active bizar could not be verified'}`));
+      return r;
+    }
     if (r.fixed.length > 0) {
       console.log(chalk.cyan('\n  Repair: repointed stale bin symlinks:'));
       for (const f of r.fixed) console.log(`    ${f}`);
       console.log(chalk.dim('    Re-run your shell or `hash -r` to pick up the new path.'));
     }
+    return r;
   } catch (err) {
     console.log(chalk.dim(`  Repair skipped: ${err.message}`));
+    return { ok: false, error: err.message };
   }
 }
 
@@ -171,8 +174,8 @@ export async function install(args, isHelpRequest) {
   // parser for the installer family. Reusing it keeps install and
   // update in lockstep on flag semantics. --deep is parsed as an
   // alias for --force (clean-install semantics, F-183).
-  const { mode, dryRun, force, yes } = parseFlags(args);
-  const result = await runInstaller({ mode, dryRun, force, yes });
+  const { mode, dryRun, force, reallyResetGlobalClaudeConfig, yes } = parseFlags(args);
+  const result = await runInstaller({ mode, dryRun, force, reallyResetGlobalClaudeConfig, yes });
   // F-183 — print a one-line summary of the wipe scope so operators
   // can see at a glance what changed without re-reading the verbose
   // step list.
@@ -186,10 +189,10 @@ export async function install(args, isHelpRequest) {
   }
   // v4.4.3 — After install, repair any stale bin symlinks so the
   // user picks up the new code.
-  await runPostInstallerRepair();
+  const repairResult = await runPostInstallerRepair();
   // v10.19.6 — propagate install failure to the parent shell so
   // `bizar install && bizar doctor` short-circuits on install errors.
-  if (!result?.ok) process.exit(1);
+  if (!result?.ok || repairResult?.ok === false) process.exit(1);
 }
 
 export async function update(args, isHelpRequest) {
@@ -242,9 +245,12 @@ export async function runUpdateWithFlags({
   parseFlags: parseFlagsDep = parseFlags,
   runRepair: runRepairDep = runRepair,
 } = {}) {
-  const { mode, dryRun, force, yes } = parseFlagsDep(args);
-  const result = await runInstallerDep({ mode, dryRun, force, yes });
-  await runPostInstallerRepair({ runRepair: runRepairDep });
+  const { mode, dryRun, force, reallyResetGlobalClaudeConfig, yes } = parseFlagsDep(args);
+  const installerOpts = { mode, dryRun, force, yes };
+  if (reallyResetGlobalClaudeConfig) installerOpts.reallyResetGlobalClaudeConfig = true;
+  const result = await runInstallerDep(installerOpts);
+  const repairResult = await runPostInstallerRepair({ runRepair: runRepairDep });
+  if (repairResult && repairResult.ok === false) process.exit(1);
   if (!result?.ok) process.exit(1);
   return result;
 }

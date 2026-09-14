@@ -27,6 +27,7 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  renameSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -46,6 +47,9 @@ import {
   resolveOpenKanOk,
   verifyOpenKanRuntime,
 } from './openkan.mjs';
+import { normalizeProvisionPolicy } from './policies.mjs';
+import { detectOpenWolf, ensureOpenWolfRuntime } from './openwolf.mjs';
+import { resolveExecutionBackend } from './execution-context.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -252,7 +256,9 @@ export function readInstallMarker() {
 
 /** Write the install marker file. */
 export function writeInstallMarker({ version, repoPath, serviceUnit }) {
+  const previous = readJsonSafe(join(BIZAR_HOME(), 'installed.json'), {}) || {};
   const marker = {
+    ...previous,
     version: version || currentVersion(PKG_MAIN) || 'unknown',
     installedAt: new Date().toISOString(),
     repoPath: repoPath || REPO_ROOT,
@@ -267,7 +273,104 @@ export function writeInstallMarker({ version, repoPath, serviceUnit }) {
   }
 }
 
+/** Normalize the host surface once per provision run for dynamic selection. */
+export function writeCapabilitySnapshot({ dryRun = false } = {}) {
+  const path = join(BIZAR_HOME(), 'capabilities.json');
+  const previous = readJsonSafe(path, {}) || {};
+  const available = (id, source, name, description, tags = []) => ({
+    id, source, name, description, tags, availability: 'available',
+  });
+  const capabilities = [
+    available('builtin:filesystem', 'builtin', 'filesystem', 'Read and write repository files', ['files', 'edit']),
+    available('builtin:source-control', 'builtin', 'source control', 'Git and repository history', ['git']),
+    ...(['node', 'npm', 'git', 'claude', 'bun'].map((cmd) => ({
+      id: `shell:${cmd}`, source: 'shell', name: cmd, availability: haveCmd(cmd) ? 'available' : 'failed',
+    }))),
+    ...(existsSync(join(CLAUDE_DIR, 'skills')) ? [available('claude:skills', 'skill', 'Claude skills', 'Installed skill packs', ['skill'])] : []),
+    ...(existsSync(join(CLAUDE_DIR, 'agents')) ? [available('claude:agents', 'agent', 'Claude agents', 'Installed specialist agents', ['agent'])] : []),
+    ...(existsSync(join(CLAUDE_DIR, 'workflows')) ? [available('claude:workflows', 'workflow', 'Claude workflows', 'Installed workflows', ['workflow'])] : []),
+  ];
+  const openWolf = detectOpenWolf();
+  capabilities.push({
+    id: 'project-memory-context',
+    source: 'executable-discovery',
+    provider: 'openwolf',
+    name: 'project memory context',
+    description: 'Locate symbols, map projects, recall bugs, and restore handoffs',
+    operations: ['locate-symbol', 'map-project', 'recall-bug', 'memory-handoff', 'project-index', 'context-governor'],
+    version: openWolf.version,
+    availability: openWolf.compatible ? 'available' : (openWolf.available ? 'degraded' : 'unavailable'),
+    tags: ['openwolf', 'memory', 'context', 'find', 'map'],
+  });
+  const snapshot = {
+    schema: 'bizar.runtime-capabilities.v1',
+    sessionId: process.env.AO_SESSION_ID || process.env.CLAUDE_SESSION_ID || `provision-${process.pid}`,
+    generation: Number(previous.generation || 0) + 1,
+    host: { adapter: 'bizar-provisioner', version: BIZAR_VERSION },
+    discovery: { mode: 'upfront', searchTool: 'capability-select' },
+    capabilities,
+    mcpServers: [{ name: 'bizar', status: readJsonSafe(join(CLAUDE_DIR, 'settings.json'), {})?.mcpServers?.bizar ? 'connected' : 'pending', toolsKnown: false }],
+  };
+  if (!dryRun) {
+    mkdirSync(BIZAR_HOME(), { recursive: true });
+    writeFileSync(path, JSON.stringify(snapshot, null, 2) + '\n', { mode: 0o600 });
+  }
+  return snapshot;
+}
+
 export function ownershipManifestPath() { return join(BIZAR_HOME(), 'ownership.json'); }
+export function transactionJournalPath() { return join(BIZAR_HOME(), 'transaction.json'); }
+
+function beginTransaction({ mode, policy, dryRun }) {
+  const journal = {
+    schema: 'bizar.install-transaction.v1',
+    status: 'applying',
+    startedAt: new Date().toISOString(),
+    mode,
+    dryRun,
+    policy,
+    version: BIZAR_VERSION,
+  };
+  if (!dryRun) {
+    mkdirSync(BIZAR_HOME(), { recursive: true });
+    writeFileSync(transactionJournalPath(), JSON.stringify(journal, null, 2) + '\n', { mode: 0o600 });
+  }
+  return journal;
+}
+
+function completeTransaction(journal, ok) {
+  const completed = { ...journal, status: ok ? 'complete' : 'failed', completedAt: new Date().toISOString() };
+  if (!journal.dryRun) writeFileSync(transactionJournalPath(), JSON.stringify(completed, null, 2) + '\n', { mode: 0o600 });
+  return completed;
+}
+
+const ownershipWrites = [];
+
+function backupRoot() { return join(BIZAR_HOME(), 'backups'); }
+
+function recordManagedWrite(path, component, kind = 'created') {
+  const previousSha256 = existsSync(path) ? hashFile(path) : null;
+  let backupPath = null;
+  if (previousSha256) {
+    try {
+      const relative = path.replace(/^[/\\]+/, '').replace(/[\\/]/g, '__');
+      backupPath = join(backupRoot(), `${previousSha256}-${relative}`);
+      ensureDir(dirname(backupPath));
+      if (!existsSync(backupPath)) copyFileSync(path, backupPath);
+    } catch { backupPath = null; }
+  }
+  ownershipWrites.push({ path, component, kind, previousSha256, backupPath });
+}
+
+function recordManagedTree(srcDir, destDir, component) {
+  if (!existsSync(srcDir)) return;
+  for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+    const src = join(srcDir, entry.name);
+    const dest = join(destDir, entry.name);
+    if (entry.isDirectory()) recordManagedTree(src, dest, component);
+    else if (entry.isFile()) recordManagedWrite(dest, component, existsSync(dest) ? 'replaced' : 'created');
+  }
+}
 
 function hashFile(path) {
   try { return createHash('sha256').update(readFileSync(path)).digest('hex'); } catch { return null; }
@@ -284,12 +387,29 @@ function collectOwnedFiles(root, dir = root, out = {}) {
 }
 
 export function writeOwnershipManifest({ dryRun = false } = {}) {
+  const prior = readJsonSafe(ownershipManifestPath(), {}) || {};
   const files = {};
-  for (const root of [CLAUDE_AGENTS_DIR, CLAUDE_SKILLS_DIR, CLAUDE_COMMANDS_DIR, CLAUDE_HOOKS_DIR, CLAUDE_RULES_DIR]) {
-    Object.assign(files, collectOwnedFiles(root));
+  const priorFiles = prior.files && !Array.isArray(prior.files) ? prior.files : {};
+  for (const [path, old] of Object.entries(priorFiles)) files[path] = old;
+  for (const write of ownershipWrites.splice(0)) {
+    const installedSha256 = hashFile(write.path);
+    if (!installedSha256) continue;
+    const backupPath = write.backupPath || files[write.path]?.backupPath || null;
+    files[write.path] = {
+      path: write.path,
+      kind: write.kind,
+      previousSha256: write.previousSha256,
+      installedSha256,
+      backupPath,
+      component: write.component,
+      version: BIZAR_VERSION,
+    };
   }
-  const manifest = { schema: 'bizar.install-ownership.v1', generatedAt: new Date().toISOString(), version: BIZAR_VERSION, files };
-  if (!dryRun) writeFileSync(ownershipManifestPath(), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  const manifest = { schema: 'bizar.install-ownership.v2', generatedAt: new Date().toISOString(), version: BIZAR_VERSION, files };
+  if (!dryRun) {
+    mkdirSync(BIZAR_HOME(), { recursive: true });
+    writeFileSync(ownershipManifestPath(), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  }
   return manifest;
 }
 
@@ -503,7 +623,17 @@ export function pruneStale(srcDir, destDir, opts = {}) {
  */
 function pruneReport(srcDir, destDir, filter, force) {
   if (!force) return { pruned: 0, tail: '' };
-  const pruned = pruneStale(srcDir, destDir, { filter }).removed;
+  const manifest = readJsonSafe(ownershipManifestPath(), {}) || {};
+  const files = manifest.files && !Array.isArray(manifest.files) ? manifest.files : {};
+  let pruned = 0;
+  for (const [path, record] of Object.entries(files)) {
+    if (!path.startsWith(`${destDir}/`) || !filter(path.split('/').pop(), path)) continue;
+    const rel = path.slice(destDir.length + 1);
+    if (existsSync(join(srcDir, rel)) || !existsSync(path)) continue;
+    const installed = record.installedSha256 || record.sha256;
+    if (installed && hashFile(path) !== installed) continue;
+    try { rmSync(path, { force: true }); pruned++; } catch { /* preserve on failure */ }
+  }
   return { pruned, tail: pruned ? `, pruned ${pruned} stale` : '' };
 }
 
@@ -518,6 +648,7 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   if (!existsSync(src)) return { ok: true, message: `no agents source at ${src}`, copied: 0, skipped: 0 };
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
+  recordManagedTree(src, dest, 'agents');
   const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
   // v10.20.0: ship `_shared/*.md` (AGENT_BASELINE + CLAUDE_TOOLS + SKILLS)
   // alongside agents so the Git / External-APIs / tool-shape pointers
@@ -529,6 +660,7 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   let sharedCopied = 0;
   if (existsSync(sharedSrc)) {
     ensureDir(sharedDst);
+    recordManagedTree(sharedSrc, sharedDst, 'agents');
     for (const f of readdirSync(sharedSrc)) {
       if (f.endsWith('.md')) { copyFileSync(join(sharedSrc, f), join(sharedDst, f)); sharedCopied++; }
     }
@@ -545,11 +677,12 @@ export async function syncSkillFiles({ dryRun = false, force = false } = {}) {
   const dest = CLAUDE_SKILLS_DIR;
   if (!existsSync(src)) return { ok: true, message: `no skills source at ${src}`, copied: 0, skipped: 0 };
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
-  ensureDir(dest); copyDirContents(src, dest);
+  ensureDir(dest); recordManagedTree(src, dest, 'skills'); copyDirContents(src, dest);
   const sharedBaseline = join(REPO_ROOT, 'config', 'agents', '_shared', 'AGENT_BASELINE.md');
   if (existsSync(sharedBaseline)) {
     const baselineDir = join(dest, 'agent-baseline');
     ensureDir(baselineDir);
+    recordManagedWrite(join(baselineDir, 'SKILL.md'), 'skills', existsSync(join(baselineDir, 'SKILL.md')) ? 'replaced' : 'created');
     copyFileSync(sharedBaseline, join(baselineDir, 'SKILL.md'));
   }
   // Skill packs are directories containing SKILL.md; a stray non-SKILL.md
@@ -568,6 +701,7 @@ export async function syncCommandFiles({ dryRun = false, force = false } = {}) {
   const dest = CLAUDE_COMMANDS_DIR;
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
+  recordManagedTree(src, dest, 'commands');
   const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
   const { pruned, tail } = pruneReport(src, dest, n => n.endsWith('.md'), force);
   return { ok: true, message: `${copied} command(s) synced (${skipped} kept)${tail}`, copied, skipped, pruned };
@@ -579,6 +713,7 @@ export async function syncRulesFiles({ dryRun = false, force = false } = {}) {
   if (!existsSync(src)) return { ok: true, message: `no rules source at ${src}`, copied: 0, skipped: 0 };
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
+  recordManagedTree(src, dest, 'rules');
   const ruleFilter = n => n.endsWith('.md') || n.endsWith('.txt');
   const { copied, skipped } = syncDir(src, dest, { filter: ruleFilter });
   const { pruned, tail } = pruneReport(src, dest, ruleFilter, force);
@@ -591,6 +726,7 @@ export async function syncHookFiles({ dryRun = false, force = false } = {}) {
   ensureDir(dest);
   if (!existsSync(src)) return { ok: true, message: `no hooks source at ${src}`, copied: 0, skipped: 0 };
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
+  recordManagedTree(src, dest, 'hooks');
   copyDirContents(src, dest);
   // Hooks are .mjs / .sh scripts. Restrict prune to those extensions so
   // any user-owned file (READMEs, fixtures, etc.) is not removed.
@@ -844,6 +980,17 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const operatorGatewayUrl = savedBaseUrl
     || process.env.ANTHROPIC_BASE_URL
     || existingBaseUrl;
+  if (operatorGatewayUrl) {
+    try {
+      const parsed = new URL(operatorGatewayUrl);
+      const loopback = ['127.0.0.1', '::1', 'localhost'].includes(parsed.hostname.toLowerCase());
+      if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && (loopback || process.env.BIZAR_ALLOW_INSECURE_PROVIDER === '1'))) {
+        return { ok: false, message: 'refusing a remote plaintext provider URL; use HTTPS or BIZAR_ALLOW_INSECURE_PROVIDER=1' };
+      }
+    } catch {
+      return { ok: false, message: 'invalid provider URL' };
+    }
+  }
   // Resolve hook commands via `resolveHookCommand`, which emits the
   // absolute-path wrapper invocation when the shim is executable and
   // falls back to the POSIX-portable `sh -c` PATH probe shipped by
@@ -1023,7 +1170,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
 
   if (dryRun) return { ok: true, message: `[dry-run] would write ${fp}` };
   ensureDir(CLAUDE_DIR);
-  writeFileSync(fp, JSON.stringify(merged, null, 2) + '\n');
+  recordManagedWrite(fp, 'settings', existsSync(fp) ? 'merged' : 'created');
+  const tmp = `${fp}.bizar-tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(merged, null, 2) + '\n', { mode: 0o600 });
+  try { chmodSync(tmp, 0o600); } catch { /* Windows */ }
+  renameSync(tmp, fp);
+  try { chmodSync(fp, 0o600); } catch { /* Windows */ }
   // F-183 — clear the in-process stash once consumed so subsequent
   // writes in the same run (or in tests) don't accidentally inherit
   // operator credentials.
@@ -1040,7 +1192,10 @@ export function writeClaudeMdMirror({ dryRun = false, force = false } = {}) {
   const src = srcCandidates.find(p => existsSync(p));
   const dest = join(CLAUDE_DIR, 'CLAUDE.md');
   if (!src) return { ok: false, message: 'no CLAUDE.md / AGENTS.md found in repo root' };
-  if (existsSync(dest) && !force) return { ok: true, message: `${dest} already exists — pass --force to overwrite` };
+  const manifest = readJsonSafe(ownershipManifestPath(), {}) || {};
+  const record = manifest.files?.[dest];
+  const ownedAndUnchanged = Boolean(record && (record.installedSha256 || record.sha256) === hashFile(dest));
+  if (existsSync(dest) && !force && !ownedAndUnchanged) return { ok: true, message: `${dest} is user-owned — preserving it` };
   if (dryRun) return { ok: true, message: `[dry-run] would mirror ${src} → ${dest}` };
   ensureDir(CLAUDE_DIR);
   const body = readFileSync(src, 'utf8');
@@ -1048,7 +1203,8 @@ export function writeClaudeMdMirror({ dryRun = false, force = false } = {}) {
     `> Auto-generated by \`cli/provision.mjs:writeClaudeMdMirror\`.\n` +
     `> DO NOT EDIT THIS FILE DIRECTLY — edit \`AGENTS.md\` and run \`make mirror-claude-md\`.\n\n` +
     `---\n\n`;
-  writeFileSync(dest, banner + body);
+  recordManagedWrite(dest, 'global-instructions', existsSync(dest) ? 'replaced' : 'created');
+  writeFileSync(dest, banner + body, { mode: 0o600 });
   return { ok: true, message: `mirrored ${src} → ${dest}`, path: dest };
 }
 
@@ -1185,11 +1341,16 @@ export async function runProvision(opts = {}) {
     mode = 'install',
     dryRun = false,
     force = false,
+    policy = normalizeProvisionPolicy({ force }),
     openkanHome,
     openkanPackageSpec,
     initializeOpenKanProject = false,
+    executionBackend,
+    openwolfRuntime = ensureOpenWolfRuntime,
   } = opts;
   const effectiveMode = mode === 'update' ? 'update' : 'install';
+  const activeBackend = resolveExecutionBackend({ cwd: process.cwd(), explicit: executionBackend });
+  const transaction = beginTransaction({ mode: effectiveMode, policy, dryRun });
 
   console.log('');
   console.log(chalk.bold.cyan(`  ⚡ BizarHarness Provisioner v${BIZAR_VERSION} (Claude Code)`));
@@ -1203,9 +1364,10 @@ export async function runProvision(opts = {}) {
   if (bizarHomeStep.ok) logOk(bizarHomeStep.message); else logErr(bizarHomeStep.message);
 
   checkToolchain();
-  installClaudeCli({ force, dryRun });
+  const claudeInstallStep = installClaudeCli({ force: policy.reinstallDependencies, dryRun });
 
   const stepResults = [];
+  stepResults.push({ label: 'claude-cli', ...claudeInstallStep });
   const runStep = async (label, fn) => {
     section(label);
     const r = await fn();
@@ -1214,13 +1376,18 @@ export async function runProvision(opts = {}) {
     return r;
   };
 
-  const openKanStep = await runStep('Ensuring OpenKan planning runtime', () => ensureOpenKanRuntime({
-    dryRun,
-    home: openkanHome,
-    packageSpec: openkanPackageSpec,
-    force,
-  }));
-  if (initializeOpenKanProject && openKanStep.ok) {
+  const openWolfStep = await runStep('Ensuring OpenWolf memory/context runtime', () => openwolfRuntime({ dryRun, force: policy.reinstallDependencies }));
+
+  const openKanStep = activeBackend === 'ao'
+    ? { ok: true, skipped: true, home: openkanHome, message: 'OpenKan inactive: AO is the selected work-state authority' }
+    : await runStep('Ensuring OpenKan planning runtime', () => ensureOpenKanRuntime({
+      dryRun,
+      home: openkanHome,
+      packageSpec: openkanPackageSpec,
+      force: policy.reinstallDependencies,
+    }));
+  if (activeBackend === 'ao') logInfo(openKanStep.message);
+  if (initializeOpenKanProject && activeBackend === 'openkan' && openKanStep.ok) {
     await runStep('Initialising OpenKan project workspace', () => {
       if (dryRun) return { ok: true, message: '[dry-run] would initialise .ok/ in the current project' };
       try {
@@ -1231,16 +1398,14 @@ export async function runProvision(opts = {}) {
       }
     });
   }
-  await runStep('Syncing skills',    () => syncSkillFiles({ dryRun, force }));
-  await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force }));
-  await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));
-  await runStep('Syncing hooks',      () => syncHookFiles({ dryRun, force }));
-  await runStep('Syncing agents',     () => syncAgentFiles({ dryRun, force }));
+  await runStep('Syncing skills',    () => syncSkillFiles({ dryRun, force: policy.pruneOwnedStaleFiles }));
+  await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force: policy.pruneOwnedStaleFiles }));
+  await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force: policy.pruneOwnedStaleFiles }));
+  await runStep('Syncing hooks',      () => syncHookFiles({ dryRun, force: policy.pruneOwnedStaleFiles }));
+  await runStep('Syncing agents',     () => syncAgentFiles({ dryRun, force: policy.pruneOwnedStaleFiles }));
   await runStep('Syncing workflows',  () => syncConfigExtras({ dryRun }));
   await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
-  writeOwnershipManifest({ dryRun });
-
   section('Writing settings.json');
   const settingsStep = writeClaudeSettings({ dryRun, force });
   if (settingsStep.ok) logOk(settingsStep.message); else logErr(settingsStep.message);
@@ -1262,9 +1427,12 @@ export async function runProvision(opts = {}) {
   }
 
   section('CLAUDE.md mirror');
-  const claudeMdStep = writeClaudeMdMirror({ dryRun, force });
+  const claudeMdStep = writeClaudeMdMirror({ dryRun, force: policy.overwriteGlobalInstructions });
   if (claudeMdStep.ok) logOk(claudeMdStep.message); else logWarn(claudeMdStep.message);
   stepResults.push({ label: 'claude-md', ...claudeMdStep });
+
+  writeOwnershipManifest({ dryRun });
+  const capabilitySnapshot = writeCapabilitySnapshot({ dryRun });
 
   section('Provision complete');
   console.log(chalk.dim(JSON.stringify(detectState(), null, 2)));
@@ -1276,7 +1444,9 @@ export async function runProvision(opts = {}) {
   console.log(chalk.dim('  Default model: sonnet → ANTHROPIC_DEFAULT_SONNET_MODEL=default (haiku→common, opus→hard, fable→fable).'));
   console.log(chalk.dim('  Provider routing is owned by OmniRoute; Bizar does not synthesize ANTHROPIC_MODEL or gateway IDs.'));
   console.log('');
-  return { ok: !anyFail, mode: effectiveMode, state: detectState(), stepResults };
+  const ok = !anyFail;
+  completeTransaction(transaction, ok);
+  return { ok, mode: effectiveMode, executionBackend: activeBackend, openWolf: openWolfStep, state: detectState(), stepResults, capabilitySnapshot, transaction };
 }
 
 // ─── Legacy / gap-closure helpers (from old provision.mjs) ───────────────────
@@ -1303,7 +1473,7 @@ export function writeBizarSkillLock({ skillsSrc, agentsDir }) {
     if (existing && existing.source === 'bizar/builtin') { existing.updatedAt = now; count++; continue; }
     lock.skills[name] = {
       source: 'bizar/builtin', sourceType: 'local',
-      sourceUrl: 'https://github.com/DrB0rk/BizarHarness',
+      sourceUrl: 'https://github.com/PolderLabsVOF/BizarHarness',
       skillPath: 'config/skills/' + name + '/SKILL.md',
       skillFolderHash: 'bizar-managed', pluginName: 'bizar',
       installedAt: existing && existing.installedAt ? existing.installedAt : now,
@@ -1335,7 +1505,7 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
       const src = join(srcDir, entry.name);
       const dst = join(dstDir, entry.name);
       if (entry.isDirectory()) await copyDirIfExists(src, dst);
-      else copyFileSync(src, dst);
+      else { recordManagedWrite(dst, 'config-extra', existsSync(dst) ? 'replaced' : 'created'); copyFileSync(src, dst); }
     }
   };
 
@@ -1351,7 +1521,7 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
       const src = join(commandsSrc, cmd.name);
       const dst = join(commandsDst, cmd.name);
       if (cmd.isDirectory()) await copyDirIfExists(src, dst);
-      else copyFileSync(src, dst);
+      else { recordManagedWrite(dst, 'commands', existsSync(dst) ? 'replaced' : 'created'); copyFileSync(src, dst); }
       counts.commands++;
     }
   }
@@ -1375,6 +1545,7 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
     ensureDir(hooksDst);
     for (const entry of readdirSync(hooksSrc, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
+      recordManagedWrite(join(hooksDst, entry.name), 'hooks', existsSync(join(hooksDst, entry.name)) ? 'replaced' : 'created');
       copyFileSync(join(hooksSrc, entry.name), join(hooksDst, entry.name));
       try { chmodSync(join(hooksDst, entry.name), 0o755); } catch { /* ignore */ }
     }
@@ -1390,6 +1561,7 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
     for (const entry of readdirSync(rulesSrc, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
       if (!entry.name.endsWith('.md') && !entry.name.endsWith('.txt')) continue;
+      recordManagedWrite(join(rulesDst, entry.name), 'rules', existsSync(join(rulesDst, entry.name)) ? 'replaced' : 'created');
       copyFileSync(join(rulesSrc, entry.name), join(rulesDst, entry.name));
       ruleCount++;
     }
@@ -1486,7 +1658,7 @@ const FORCE_CLEAN_WIPE_DIRS = Object.freeze([
  * @returns {{ ok: true, message: string, wiped: string[], preserved: string[], env: Record<string, string> }}
  */
 export function forceCleanInstall(opts = {}) {
-  const { dryRun = false } = opts;
+  const { dryRun = false, reallyResetGlobalClaudeConfig = false } = opts;
   const claudeDir = resolveClaudeDir();
   const agentsDir = resolveAgentsDir();
   const settingsPath = join(claudeDir, 'settings.json');
@@ -1514,29 +1686,37 @@ export function forceCleanInstall(opts = {}) {
   }
   process.env.BIZAR_SAVED_ENV = JSON.stringify(savedEnv);
 
-  // 2. Wipe managed dirs.
+  // Default force repair is ownership-ledger based. Generic Claude directories
+  // are shared with users and plugins and must never be treated as wholly owned.
   const wiped = [];
-  for (const sub of FORCE_CLEAN_WIPE_DIRS) {
-    const dir = join(claudeDir, sub);
-    if (!existsSync(dir)) continue;
-    wiped.push(dir);
-    if (!dryRun) {
-      try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+  const conflicts = [];
+  if (reallyResetGlobalClaudeConfig) {
+    for (const sub of FORCE_CLEAN_WIPE_DIRS) {
+      const dir = join(claudeDir, sub);
+      if (!existsSync(dir)) continue;
+      wiped.push(dir);
+      if (!dryRun) try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
-  }
-  if (existsSync(agentsDir)) {
-    wiped.push(agentsDir);
-    if (!dryRun) {
-      try { rmSync(agentsDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    if (existsSync(agentsDir)) {
+      wiped.push(agentsDir);
+      if (!dryRun) try { rmSync(agentsDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
-  }
-  // 3. Wipe settings.json so writeClaudeSettings re-emits from the
-  //    shipped template. Operators keep their gateway / auth env vars
-  //    via the BIZAR_SAVED_ENV stash.
-  if (existsSync(settingsPath)) {
-    wiped.push(settingsPath);
-    if (!dryRun) {
-      try { rmSync(settingsPath, { force: true }); } catch { /* ignore */ }
+    if (existsSync(settingsPath)) {
+      wiped.push(settingsPath);
+      if (!dryRun) try { rmSync(settingsPath, { force: true }); } catch { /* ignore */ }
+    }
+  } else {
+    const manifest = readJsonSafe(ownershipManifestPath(), {}) || {};
+    const files = manifest.files && !Array.isArray(manifest.files) ? manifest.files : {};
+    for (const [path, record] of Object.entries(files)) {
+      if (!existsSync(path)) continue;
+      const installed = record.installedSha256 || record.sha256;
+      if (installed && hashFile(path) !== installed) {
+        conflicts.push(path);
+        continue;
+      }
+      wiped.push(path);
+      if (!dryRun) try { rmSync(path, { force: true }); } catch { conflicts.push(path); }
     }
   }
 
@@ -1558,8 +1738,8 @@ export function forceCleanInstall(opts = {}) {
   }
 
   const tag = dryRun ? '[dry-run] ' : '';
-  const message = `${tag}F-183 clean: wiped ${wiped.length} paths; preserved ${preserved.length} paths (BIZAR_HOME + evidence + learning + third-party state)`;
-  return { ok: true, message, wiped, preserved, env: savedEnv };
+  const message = `${tag}ownership-safe repair: removed ${wiped.length} unchanged Bizar files; preserved ${preserved.length} shared paths${conflicts.length ? `; conflicts ${conflicts.length}` : ''}`;
+  return { ok: conflicts.length === 0, message, wiped, preserved, conflicts, env: savedEnv };
 }
 
 /**
@@ -1575,7 +1755,7 @@ export function clearSavedEnv() {
 // ─── CLI entry ──────────────────────────────────────────────────────────────
 
 export function parseFlags(argv) {
-  const opts = { mode: 'install', dryRun: false, force: false, yes: false, start: true, update: false };
+  const opts = { mode: 'install', dryRun: false, force: false, reallyResetGlobalClaudeConfig: false, yes: false, start: true, update: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--mode=install') opts.mode = 'install';
@@ -1586,12 +1766,13 @@ export function parseFlags(argv) {
       if (v === 'install' || v === 'update' || v === 'install-only-system') opts.mode = v;
     } else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--force' || a === '--deep') opts.force = true;
+    else if (a === '--really-reset-global-claude-config') opts.reallyResetGlobalClaudeConfig = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (a === '--non-interactive') opts.yes = true;
     else if (a === '--no-service') opts.start = false;
     else if (a === '--update') opts.mode = 'update';
     else if (a === '--help' || a === '-h') {
-      console.log('Usage: node cli/provision.mjs [--mode=install|update|install-only-system]\n       [--dry-run] [--force] [--yes] [--non-interactive] [--no-service]');
+      console.log('Usage: node cli/provision.mjs [--mode=install|update|install-only-system]\n       [--dry-run] [--force] [--really-reset-global-claude-config] [--yes] [--non-interactive] [--no-service]');
       process.exit(0);
     }
   }

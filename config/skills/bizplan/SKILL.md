@@ -277,7 +277,7 @@ The canonical methodology lives at
 folded into the Architect pass.
 
 Deliberate mode is **auto-enabled** when the prompt signals any of the
-seven-category floor at
+high-impact evidence categories at
 `config/claude/hooks/permission-request.mjs:64–69`:
 
 - auth / security

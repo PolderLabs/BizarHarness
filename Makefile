@@ -24,17 +24,23 @@ setup:  ## Install Bizar dependencies
 dev:  ## Run the SDK test watcher
 	npm run test:sdk:watch
 
-check:  ## Typecheck + lint
+check-types:  ## TypeScript/type integrity only
 	@echo "▶ Running TypeScript check..."
 	@bunx tsc --noEmit
 	@echo "✓ TypeScript check passed"
 
-test:  ## Run all unit tests (sdk + cli)
+check: check-types  ## Backward-compatible typecheck alias
+
+check-unit:  ## Run all unit tests (sdk + cli)
 	@npm test
 
-e2e:  ## End-to-end tests (SDK + Claude Code integration)
+test: check-unit  ## Backward-compatible unit-test alias
+
+check-e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@echo "▶ E2E: SDK load + tool registration..."
 	@node scripts/with-sdk-dist-lock.mjs node scripts/run-e2e-with-sdk-build.mjs
+
+e2e: check-e2e  ## Backward-compatible E2E alias
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 check-arch:  ## Run architectural constraints (scripts/check-arch.sh)
@@ -48,8 +54,20 @@ sync-skills-mirror:  ## Mirror config/skills/ -> config/claude/skills/ (idempote
 verify-thinking-skills:  ## Verify every thinking-*/skillopt SKILL.md is well-formed
 	@node scripts/verify-thinking-skills.mjs
 
-clean-check:  ## Run the five-dimension clock-out verifier
-	@bash scripts/clean-state-check.sh
+check-cleanliness:  ## Check repository cleanliness without running unrelated suites
+	@bash scripts/clean-state-check.sh --cleanliness-only
+
+clean-check: check-cleanliness  ## Backward-compatible cleanliness alias
+
+check-package:  ## Build and pack smoke test
+	@npm run build
+	@npm pack --dry-run >/dev/null
+
+verify-local: check-types check-unit check-cleanliness  ## Proportional local verification
+
+verify-integration: check-types check-unit check-arch check-e2e  ## Cross-component verification
+
+verify-release: verify-removed-surfaces verify-repo-structure check-arch check-types check-unit check-e2e check-cleanliness check-package  ## Canonical release gate; each primitive runs once
 
 verify-removed-surfaces:  ## Prove removed UI and note-vault systems are absent
 	@node scripts/verify-removed-surfaces.mjs
@@ -93,4 +111,4 @@ worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist syml
 	@./scripts/worktree-setup.sh "$(WORKTREE)"
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e check-arch clean-check verify-removed-surfaces verify-repo-structure verify-no-9router audit session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills
+.PHONY: help setup dev check check-types test check-unit e2e check-e2e check-arch clean-check check-cleanliness check-package verify-local verify-integration verify-release verify-removed-surfaces verify-repo-structure verify-no-9router audit session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills

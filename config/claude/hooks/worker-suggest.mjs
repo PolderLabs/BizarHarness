@@ -5,8 +5,8 @@
  * Bizar Background Workers — UserPromptSubmit hook.
  *
  * Runs on every user prompt. Only unmistakably tiny, single-scope edits take
- * a cheap fast path. Every other request is routed into a team-first Bizar
- * coordination mode selected by Mike after bounded orientation.
+ * a cheap fast path. Other requests stay direct when Mike can complete them
+ * correctly with the available capabilities; delegation is value-driven.
  *
  * Uses import.meta.url + dynamic import() to resolve the sibling CLI module so
  * the hook works regardless of install path (fixes ERR_MODULE_NOT_FOUND after
@@ -58,13 +58,13 @@ const QUICK_ROUTE_POLICY = [
   'Bizar /quick direct path:',
   '- The user explicitly selected direct, primary-session execution for this turn. Do not create an Agent team, dispatch a subagent, or start a workflow merely because the request is substantial.',
   '- Do bounded read-only orientation, then proceed autonomously when the requested outcome, acceptance criteria, and safety boundary are clear. Ask only when a material choice or missing success criterion prevents a safe, correct implementation.',
-  '- /quick never bypasses worktree, approval, credential, destructive-action, or verification safeguards. Run the smallest relevant proof before reporting completion.',
+  '- /quick never bypasses worktree, credential, destructive-action, contract, or verification safeguards. Run the smallest relevant proof before reporting completion.',
 ].join('\n');
 
 const ROUTE_POLICY = [
   'Adaptive Bizar routing policy:',
   '- If this is the primary session, you ARE @mike. First do only bounded read-only orientation. If the inferred outcome, acceptance criteria, and safety boundary are clear, continue without a clarification question. Ask one concise question only when a material choice, unresolved constraint, or missing success criterion would change the work.',
-  '- For substantive work, native Agent teams are the default execution method. Form a small team with clear ownership, use a lead to integrate evidence, and use worktrees for editors. Use direct execution only for an unmistakably tiny edit or an explicit /quick request. Use a single agent or a native workflow only when the user explicitly requests that mode or an existing workflow must be resumed.',
+  '- Prefer direct execution with the available capabilities. Delegate only when independent parallel lanes, specialization, context isolation, long-running work, or independent review has positive expected value. Use worktrees for editing workers and keep one owner for coupled code.',
   '- For every normal Agent, workflow worker, or agent-team teammate, pick ONE of the four native aliases (`haiku`, `sonnet`, `opus`, `fable`) as the native `model` field per the alias policy in the plan: `haiku` for trivial/cheap, `sonnet` for ordinary work, `opus` for hard / architectural / adversarial / debug / high-risk review lanes, `fable` for explicit Anthropic OpenAI-compat surfaces. Do NOT pass a raw gateway ID (e.g., `claude-minimax/...`, `cx/...`); OmniRoute handles ordered failover between configured full IDs for the chosen alias. Do NOT read model-router state, user-selected profiles, tier hints, or health snapshots. Do NOT construct `args.routing`. For teams, do not name a competing model in the spawn prompt. Every editing worker uses call-level `isolation: "worktree"`. For genuinely disjoint writable scopes, dispatch concurrently; otherwise use one owner.',
   '- Consume each terminal agent result exactly once from its original `<result>`/final summary, merge queued worktrees with bizar worktree-merge, and run integration checks in the primary session. Never send a terminal notification, idle ping, or completed task back to that agent as a follow-up and never re-dispatch a completed background agent merely to summarize its result. A subagent may not recursively dispatch itself.',
   '- Do NOT execute any tool you do not have. If a tool you need is missing from your tools list, dispatch to a subagent that has it — do not pretend you have it.',
@@ -75,8 +75,8 @@ const ROUTE_POLICY = [
  * OMX-derived primitive hints — surfaced additively in `additionalContext` when
  * the prompt exhibits the documented signal. These are *informational pivots*
  * that complement the dispatcher-emitted worker suggestions; they do not
- * modify the dispatcher itself. See `office-manager.md` for the gating
- * contract (HITL floor, ambiguity floor ≤ 0.10) that governs every primitive.
+ * modify the dispatcher itself. See `office-manager.md` for the evidence and
+ * ambiguity guidance that governs every primitive.
  */
 const OMX_PRIMITIVE_HINTS = [
   'Bizar OMX-derived primitive pivots (Phase 6):',
@@ -84,7 +84,7 @@ const OMX_PRIMITIVE_HINTS = [
   '- Request describes a multi-objective run with sub-stories, weighted lanes, or checkpoints → consider `ultragoal` (durable progress tracker with four-lane completion fence). Treat its terminal transitions as the completion contract.',
   '- User asks for a research-grounded plan, architecture decision, or "what should we do" without immediate implementation → consider `bizplan` (separate planner + adversarial reviewer). Do not let execution leak past the `plan` stage.',
   '- Greenfield ideation with no spec yet ("I want to build X") → consider `brainstorming` before any deep-interview or bizplan escalation.',
-  '- Two non-negotiable gates always apply: (1) surface any HITL-floor category (push, PR mutation, release, publish, deploy, prod write, credential, public exposure, irreversible destruction) before continuing, even when `/autopilot` or `/ultragoal` is in flight; (2) refuse to advance past `/deep-interview` while the spec ambiguity score is > 0.10.',
+  '- High-impact actions still require stronger evidence, ownership, rollback, and contract checks; they are not approval gates. Refuse to advance past `/deep-interview` while the spec ambiguity score is > 0.10.',
 ].join('\n');
 
 /**

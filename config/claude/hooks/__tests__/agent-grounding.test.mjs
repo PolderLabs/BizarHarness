@@ -27,7 +27,7 @@ test('every non-empty primary prompt receives adaptive Bizar routing', () => {
   const context = result.hookSpecificOutput.additionalContext;
   assert.match(context, /Adaptive Bizar routing/i);
   assert.match(context, /Ask one concise question only/);
-  assert.match(context, /Agent teams are the default execution method/);
+  assert.match(context, /Prefer direct execution with the available capabilities/);
   assert.match(context, /@mike/);
   assert.match(context, /you ARE @mike/i);
 });

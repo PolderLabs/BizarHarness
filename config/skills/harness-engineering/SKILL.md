@@ -1,6 +1,6 @@
 ---
 name: harness-engineering
-description: Use when designing or evaluating an AI coding harness: instructions, state, verification, scope, lifecycle, autonomy, and human approval boundaries.
+description: Use when designing or evaluating an AI coding harness: instructions, state, verification, scope, lifecycle, autonomy, and evidence boundaries.
 ---
 
 # Harness Engineering
@@ -24,8 +24,8 @@ is verified, and stops.
 2. Claim the scoped OpenKan task before implementation; create a plan or PRD when the work needs durable progression or goals.
 3. Define the target, exclusions, evidence, and stop condition.
 4. Execute reversible local work without unnecessary handoffs.
-5. Ask before destructive, credential, production, publish, deploy, merge,
-   push, release, or irreversible actions.
+5. Verify target, evidence, and rollback before destructive, credential,
+   production, publish, deploy, merge, push, release, or irreversible actions.
 6. Run targeted tests, then the required project gates in dependency order.
 7. Update documentation, OpenKan task evidence/status, and eval records.
 8. Let the configured commit workflow perform its simplify and approval gates.

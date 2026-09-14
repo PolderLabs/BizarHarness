@@ -14,6 +14,9 @@ export interface CompletionContract {
   readonly requiredDeliverables: readonly string[];
   readonly requiredVerification: readonly string[];
   readonly explicitRestrictions?: readonly string[];
+  /** Distinguishes proving the requested task from proving repository health. */
+  readonly confidenceScope?: "task" | "repository";
+  readonly verificationLevel?: "V0" | "V1" | "V2" | "V3" | "V4";
 }
 
 export interface CompletionState {
@@ -33,4 +36,27 @@ export function canComplete(contract: CompletionContract, state: CompletionState
     && (state.openRequiredTasks?.length ?? 0) === 0
     && (state.unresolvedRestrictions?.length ?? 0) === 0
     && state.integrationStateClean !== false;
+}
+
+export interface VerificationCheck {
+  readonly id: string;
+  readonly command?: string;
+  readonly reason: string;
+}
+
+export interface VerificationPlan {
+  readonly level: "V0" | "V1" | "V2" | "V3" | "V4";
+  readonly claims: readonly string[];
+  readonly selectedChecks: readonly VerificationCheck[];
+  readonly escalationTriggers: readonly string[];
+  readonly completedEvidence: readonly string[];
+}
+
+export function createVerificationPlan(input: Omit<VerificationPlan, "completedEvidence">): VerificationPlan {
+  return Object.freeze({ ...input, completedEvidence: [] });
+}
+
+export function isVerificationSufficient(plan: VerificationPlan, completedEvidence: readonly string[]): boolean {
+  const completed = new Set(completedEvidence);
+  return plan.selectedChecks.every((check) => completed.has(check.id));
 }

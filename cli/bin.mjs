@@ -103,10 +103,12 @@ function showHelp() {
     update              Update Claude Code, Bizar, and the SDK
     doctor              Check the BizarHarness install for health issues
     repair              Fix common install issues
+    uninstall           Remove Bizar-owned files safely (dry-run supported)
     heads-up <subcommand>  Manage pre-push / pre-release heads-ups
     browser                Install, update, and verify agent-browser
     artifact               Toggle global browser completion artifacts
-    learn                  Manage bounded global preferences and project lessons
+    learn                  Manage bounded global preferences and OpenWolf project memory
+    memory                 Manage OpenWolf project memory/context (current project by default)
     tools                  Inventory installed agents, skills, hooks, commands, and MCP tools
     upgrade-defaults       Reapply safe Bizar-owned Claude defaults
     backup                 Create / list / verify / delete backups of BizarHarness state
@@ -263,6 +265,18 @@ async function main() {
     case 'migrate': {
       const { runMigrate } = await import('./migrate.mjs');
       await runMigrate(cmdArgs);
+      break;
+    }
+
+    case 'uninstall': {
+      const { runUninstall, showUninstallHelp } = await import('./uninstall.mjs');
+      if (isHelpRequest) showUninstallHelp();
+      else {
+        const result = await runUninstall({ dryRun: cmdArgs.includes('--dry-run'), keepState: cmdArgs.includes('--keep-state'), purgeOpenWolfRuntime: cmdArgs.includes('--purge-openwolf-runtime') });
+        for (const path of [...result.removed, ...result.restored]) console.log(`  ${result.dryRun ? 'would change' : 'changed'} ${path}`);
+        for (const path of result.conflicts) console.log(`  ! preserved modified file ${path}`);
+        if (!result.ok) process.exit(EXIT_ERROR);
+      }
       break;
     }
 
@@ -524,6 +538,13 @@ async function main() {
 
     case 'learn': {
       const mod = await importCommand('learn');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      break;
+    }
+
+    case 'memory': {
+      const mod = await importCommand('openwolf-memory-command');
       if (!mod) { process.exit(EXIT_ERROR); return; }
       await mod.run(cmd, cmdArgs, isHelpRequest);
       break;

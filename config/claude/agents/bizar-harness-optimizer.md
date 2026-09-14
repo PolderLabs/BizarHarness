@@ -49,7 +49,7 @@ Re-run `node scripts/harness-audit.js repo --format json` plus `node tests/run-a
 - Capability Evals: results per leverage area (pass/fail, pass@k)
 - Regression Evals: results (pass^k for safety-critical paths)
 - Applied changes (final diff) and remaining risks
-- Status: READY FOR REVIEW / SHIP IT / BLOCKED — a security-sensitive diff may never report SHIP IT; it stays BLOCKED until human approval is recorded
+- Status: READY FOR REVIEW / SHIP IT / BLOCKED — report the evidence and any unresolved security risk; do not invent a permission gate.
 
 ## Examples
 

@@ -6,3 +6,4 @@ export * from "./action-policy.js";
 export * from "./authority.js";
 export * from "./retry-policy.js";
 export * from "./evidence-policy.js";
+export * from "./provision-policy.js";

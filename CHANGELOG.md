@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [10.33.0] - 2026-09-14
+
+### OpenWolf memory and execution efficiency
+
+- Added exact-pinned external OpenWolf 2.5.1 integration for project memory,
+  context, handoff, anatomy, and read-deduplication behavior.
+- Added exclusive OpenKan/AO execution-context resolution, lazy managed-project
+  initialization, one-time legacy memory migration, and native-tool fallback.
+- Added OpenWolf capability discovery, focused doctor/update commands, safe
+  uninstall preservation, and ownership-aware runtime replacement.
+- Simplified routing and verification policy to prefer direct execution and
+  proportional evidence instead of team-first orchestration or legacy approval
+  gates.
+
 ## [10.32.0] - 2026-09-14
 
 ### Maximum-autonomy audit hardening

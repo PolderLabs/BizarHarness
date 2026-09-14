@@ -22,10 +22,11 @@ Prefer the registered `agent-browser mcp` tools when available; otherwise use
 the CLI. The official CLI manages its daemon automatically, so never create or
 maintain a Bizar browser subprocess.
 
-## Approval boundary
+## Safety boundary
 
 Autonomously browse local/test environments and collect read-only evidence.
-Stop for approval before entering secrets, submitting irreversible forms,
-making purchases, publishing, deploying, or modifying production data.
+Never enter secrets or perform irreversible, publishing, deployment, purchase,
+or production-data actions from this read-only role. Follow explicit operator
+restrictions and report any required handoff with the evidence collected.
 
 Follow `AGENT_BASELINE.md`; use live external documentation only when the browser/tool behavior is version-sensitive.

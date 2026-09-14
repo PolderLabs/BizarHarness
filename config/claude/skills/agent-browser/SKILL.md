@@ -46,8 +46,8 @@ Bizar subprocess or maintain a second daemon wrapper.
 Claude Code may use the registered `agent-browser mcp` server instead of Bash
 when typed MCP tools are available.
 
-## Approval boundary
+## Evidence boundary
 
-Reading pages and collecting local evidence are autonomous. Ask before entering
-credentials, submitting irreversible forms, publishing, purchasing, or changing
-production state.
+Reading pages and collecting local evidence are autonomous. For credentials,
+irreversible forms, publishing, purchasing, or production state, verify the
+target and action contract and honor explicit operator restrictions.

@@ -108,9 +108,9 @@ function findStaleBinLinks(expectedPkgRoot) {
   const binDirs = [
     join(HOME, '.local', 'bin'),
     join(HOME, '.npm-global', 'bin'),
-    '/usr/local/bin',
+    // System directories are observation-only unless the link is recorded as
+    // Bizar-owned by the caller. A user install must never rewrite /usr/bin.
     npmGlobal ? join(npmGlobal, '..', '..', 'bin') : null,
-    '/usr/bin',
   ].filter((p) => p && existsSync(p));
 
   for (const dir of binDirs) {
@@ -188,6 +188,7 @@ export async function runRepair({ dryRun = false, binOnly = false } = {}) {
 
   // Find stale bin symlinks.
   const stale = findStaleBinLinks(expectedPkgRoot);
+  let failed = false;
   if (stale.length === 0) {
     notes.push('No stale bin symlinks detected.');
   } else {
@@ -199,11 +200,25 @@ export async function runRepair({ dryRun = false, binOnly = false } = {}) {
         if (r.ok) {
           fixed.push(`${s.linkPath} -> ${r.newTarget}`);
         } else {
+          failed = true;
           notes.push(`  Failed to fix ${s.linkPath}: ${r.error}`);
         }
       }
     }
   }
 
-  return { ok: true, fixed, notes, dryRun };
+  if (!dryRun) {
+    try {
+      const active = execFileSync('bizar', ['--version'], { encoding: 'utf8', timeout: 5000 }).trim();
+      const pkg = JSON.parse(readFileSync(join(expectedPkgRoot, 'package.json'), 'utf8'));
+      if (!active.includes(pkg.version)) {
+        failed = true;
+        notes.push(`Active bizar resolves to ${active}, expected ${pkg.version}.`);
+      }
+    } catch (error) {
+      failed = true;
+      notes.push(`Could not verify active bizar executable: ${error.message}`);
+    }
+  }
+  return { ok: !failed, fixed, notes, dryRun };
 }

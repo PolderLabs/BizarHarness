@@ -24,7 +24,7 @@ consumers (`@plan-architect`, `@linda` BIZPLAN-Critic) from there:
 ## When deliberate mode is auto-enabled
 
 BIZPLAN deliberate mode is auto-enabled when the prompt signals any of
-the seven-category floor at
+the high-impact evidence categories at
 `config/claude/hooks/permission-request.mjs:64–69`:
 
 - auth / security

@@ -2,7 +2,7 @@
 # install.sh — BizarHarness OS dependencies installer
 # Usage:
 #   ./install.sh [--non-interactive|--dry-run]
-#   curl -fsSL https://raw.githubusercontent.com/DrB0rk/BizarHarness/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/PolderLabsVOF/BizarHarness/v10.33.0/install.sh | bash
 set -euo pipefail
 
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; N='\033[0m'
@@ -14,8 +14,8 @@ node_22_or_newer() { cmd node && node -e 'process.exit(Number(process.versions.n
 dry()  { [ "${DRY:-0}" -eq 0 ] && "$@" || echo "  would $*" >&2; }
 sudo_if_needed() { [ "$(id -u)" -ne 0 ] && cmd sudo && SUDO="sudo" || SUDO=""; }
 
-readonly BIZAR_GITHUB_REPOSITORY="DrB0rk/BizarHarness"
-readonly BIZAR_DEFAULT_REF="master"
+readonly BIZAR_GITHUB_REPOSITORY="PolderLabsVOF/BizarHarness"
+readonly BIZAR_DEFAULT_REF="latest"
 
 is_bizar_package_root() {
   local root="$1"
@@ -71,41 +71,39 @@ archive_root_name() {
 
 bootstrap_public_package() {
   local ref="${BIZAR_INSTALL_REF:-$BIZAR_DEFAULT_REF}"
-  local tmp archive source_dir root package_root archive_url cleanup_command
+  local version commit package_spec
 
-  validate_install_ref "$ref"
+  case "$(uname -s)" in
+    Linux) linux ;;
+    Darwin) macos ;;
+    *) err "Unsupported OS. Install with: npm install --global @polderlabs/bizar@<version> && bizar install"; return 1 ;;
+  esac
   cmd curl || { err "curl is required for a piped installation"; return 1; }
-  cmd tar || { err "tar is required for a piped installation"; return 1; }
-
-  tmp="$(mktemp -d "${TMPDIR:-/tmp}/bizar-install.XXXXXX")"
-  archive="$tmp/bizar.tar.gz"
-  source_dir="$tmp/source"
-  archive_url="https://api.github.com/repos/${BIZAR_GITHUB_REPOSITORY}/tarball/${ref}"
-  printf -v cleanup_command 'rm -rf -- %q' "$tmp"
-  trap "$cleanup_command" EXIT HUP INT TERM
-
-  mkdir -p "$source_dir"
-  note "Downloading Bizar ${ref} from ${BIZAR_GITHUB_REPOSITORY}..."
-  curl -fsSL --retry 3 --connect-timeout 10 \
-    -H 'Accept: application/vnd.github+json' \
-    -H 'X-GitHub-Api-Version: 2022-11-28' \
-    "$archive_url" -o "$archive"
-
-  root="$(archive_root_name "$archive")" || {
-    err "Downloaded archive contains unsafe or unexpected paths"
-    return 1
-  }
-  tar -xzf "$archive" -C "$source_dir"
-  package_root="$source_dir/$root"
-  if ! is_bizar_package_root "$package_root"; then
-    err "Downloaded archive is not the expected @polderlabs/bizar package"
-    return 1
+  cmd npm || { err "npm is required for a piped installation"; return 1; }
+  if [ "$ref" = "latest" ]; then
+    version="$(curl -fsSL --retry 3 --connect-timeout 10 \
+      -H 'Accept: application/vnd.github+json' \
+      "https://api.github.com/repos/${BIZAR_GITHUB_REPOSITORY}/releases/latest" \
+      | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([0-9][0-9.]*\)".*/\1/p' | head -1)"
+  else
+    version="${ref#v}"
   fi
-
-  # Piped stdin is already consumed, so bootstrap installs are deliberately
-  # non-interactive. The verified package installer owns dependency setup and
-  # provisioning from this point onward.
-  bash "$package_root/install.sh" --non-interactive "$@"
+  echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { err "Could not resolve an immutable Bizar release version"; return 1; }
+  commit="$(git ls-remote "https://github.com/${BIZAR_GITHUB_REPOSITORY}.git" "refs/tags/v${version}" | awk 'NR==1 {print $1}')"
+  [ -n "$commit" ] || { err "Could not resolve release tag v${version}"; return 1; }
+  package_spec="@polderlabs/bizar@${version}"
+  local integrity
+  integrity="$(npm view "${package_spec}" dist.integrity 2>/dev/null || true)"
+  [ -n "$integrity" ] || { err "Could not verify npm integrity for ${package_spec}"; return 1; }
+  note "Installing immutable ${package_spec} (${commit}; ${integrity}) from npm..."
+  if [ "${DRY:-0}" -eq 1 ]; then
+    echo "  would npm install --global ${package_spec}"
+    return 0
+  fi
+  npm install --global "$package_spec"
+  command -v bizar >/dev/null 2>&1 || { err "npm install completed but bizar is not on PATH"; return 1; }
+  [ "$(bizar --version 2>/dev/null)" = "$version" ] || { err "active bizar version does not match ${version}"; return 1; }
+  exec bizar install --non-interactive "$@"
 }
 
 main() {
@@ -127,7 +125,7 @@ EOF
   case "$(uname -s)" in
     Linux)  linux;;
     Darwin) macos;;
-    *) err "Unsupported OS — use install.ps1 on Windows"; exit 1;;
+    *) err "Unsupported OS. Install with: npm install --global @polderlabs/bizar@<version> && bizar install"; exit 1;;
   esac
   if [ "${DRY:-0}" -eq 0 ] && ! node_22_or_newer; then
     err "OpenKan requires Node.js 22 or newer — found $(node --version 2>/dev/null || echo 'no Node.js')"

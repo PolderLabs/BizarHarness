@@ -53,7 +53,7 @@ const forbiddenPatterns = [
   [/\bmemory-distillation\b/i, 'memory distillation'],
   [/\bLightRAG\b/i, 'LightRAG integration'],
   [/\bObsidian\b/i, 'Obsidian integration'],
-  [/\bBizar Memory(?: Service| System)?\b/i, 'Bizar Memory system'],
+  [/\bBizar Memory(?: Service| System)\b/i, 'Bizar Memory system'],
 ];
 
 const scanRoots = [

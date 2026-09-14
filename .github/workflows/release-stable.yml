@@ -134,24 +134,34 @@ jobs:
             exit 1
           fi
 
-      - name: Check tag does not already exist
+      - name: Discover existing release state
+        id: state
         run: |
+          set -euo pipefail
           VER="${{ steps.version.outputs.value }}"
-          if git rev-parse -q --verify "refs/tags/v$VER" >/dev/null; then
-            if [ "${{ github.event_name }}" = "push" ]; then
-              echo "::notice::Tag v$VER already exists — this is likely a re-push. Skipping tag creation but continuing publish."
+          TAG="v$VER"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            TARGET="$(git rev-list -n1 "$TAG")"
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "tag_target=$TARGET" >> "$GITHUB_OUTPUT"
+            if [ "$TARGET" != "${GITHUB_SHA}" ]; then
+              echo "::error::Existing $TAG points to $TARGET, expected ${GITHUB_SHA}."
+              exit 1
             fi
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
+          if npm view "@polderlabs/bizar-sdk@${VER}" version >/dev/null 2>&1; then echo "sdk_exists=true" >> "$GITHUB_OUTPUT"; else echo "sdk_exists=false" >> "$GITHUB_OUTPUT"; fi
+          if npm view "@polderlabs/bizar@${VER}" version >/dev/null 2>&1; then echo "root_exists=true" >> "$GITHUB_OUTPUT"; else echo "root_exists=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Build SDK + root
         run: npm run build
 
       - name: Run gates (sanity check before publishing)
-        run: |
-          make verify-removed-surfaces verify-repo-structure check-arch clean-check check test
+        run: make verify-release
 
       - name: Publish @polderlabs/bizar-sdk @ @latest (OIDC)
-        if: ${{ inputs.dry_run != 'true' }}
+        if: ${{ inputs.dry_run != 'true' && steps.state.outputs.sdk_exists != 'true' }}
         working-directory: packages/sdk
         # OIDC trusted publishing: setup-node + registry-url injects the
         # job-level NODE_AUTH_TOKEN from the OIDC token exchange. Do NOT
@@ -163,18 +173,25 @@ jobs:
         run: npm publish --access public --tag latest
 
       - name: Publish @polderlabs/bizar @ @latest (OIDC)
-        if: ${{ inputs.dry_run != 'true' }}
+        if: ${{ inputs.dry_run != 'true' && steps.state.outputs.root_exists != 'true' }}
         # OIDC trusted publishing: same as SDK step above — no explicit env override.
         run: npm publish --access public --tag latest
 
       - name: Create git tag v${{ steps.version.outputs.value }}
-        if: ${{ inputs.dry_run != 'true' && github.event_name == 'push' }}
+        if: ${{ inputs.dry_run != 'true' }}
         run: |
+          set -euo pipefail
           VER="${{ steps.version.outputs.value }}"
+          TAG="v$VER"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VER" -m "v$VER — stable" HEAD
-          git push origin "v$VER"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            test "$(git rev-list -n1 "$TAG")" = "${GITHUB_SHA}"
+            echo "::notice::$TAG already points at ${GITHUB_SHA}; nothing to do."
+          else
+            git tag -a "$TAG" -m "$TAG — stable" HEAD
+            git push origin "$TAG"
+          fi
 
       - name: Create GitHub Release
         if: ${{ inputs.dry_run != 'true' }}

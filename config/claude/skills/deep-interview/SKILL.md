@@ -47,7 +47,7 @@ A crystallized brief must cover three stages in order; never skip a stage:
 - **Intent** — what the operator is actually trying to accomplish (the verb and the object).
 - **Outcome** — the observable, user-visible result that proves the work is done.
 - **Scope** — what is in and what is out (explicit non-goals).
-- **Decision boundaries** — which decisions are operator-bound vs. agent-bound; surface the seven HITL categories from `AGENTS.md` when they apply.
+- **Decision boundaries** — which decisions are explicitly operator-restricted vs. agent-bound; surface high-impact target and rollback evidence when it applies.
 
 Reject early closure if Stage 1 is missing or asserted without evidence.
 

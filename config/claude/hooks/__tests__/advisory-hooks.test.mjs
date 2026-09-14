@@ -255,7 +255,7 @@ test('sessionstart-prime: external/version-sensitive docs bullet is in briefing 
   );
   assert.match(
     src,
-    /bounded read-only orientation, then form a native Agent team by default/,
-    'expected adaptive coordination boundary in sessionstart-prime.mjs',
+    /Prefer direct execution with available capabilities; delegate only/,
+    'expected direct-capability coordination boundary in sessionstart-prime.mjs',
   );
 });

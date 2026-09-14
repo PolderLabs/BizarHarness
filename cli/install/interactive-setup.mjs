@@ -43,10 +43,13 @@ export function detectAdvancedConfiguration({ env = process.env, settings = {} }
   };
 }
 
-export function isValidProviderUrl(value) {
+export function isValidProviderUrl(value, { allowInsecure = false } = {}) {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    if (parsed.protocol === 'https:') return true;
+    if (parsed.protocol !== 'http:') return false;
+    const loopback = ['127.0.0.1', '::1', 'localhost'].includes(parsed.hostname.toLowerCase());
+    return loopback || allowInsecure;
   } catch {
     return false;
   }
@@ -161,8 +164,8 @@ export async function runInteractiveSetup({
   if (url) writeLine(output, `  ✓ Provider URL detected: ${url}`);
   while (!url) {
     const value = answer(await askText('  Provider URL (for example https://gateway.example/v1): ', { input, output }));
-    if (!isValidProviderUrl(value)) {
-      writeLine(output, '  ! Enter a valid http:// or https:// URL.');
+    if (!isValidProviderUrl(value, { allowInsecure: env.BIZAR_ALLOW_INSECURE_PROVIDER === '1' })) {
+      writeLine(output, '  ! Enter a valid http:// or https:// URL; remote http:// is limited to explicit insecure-provider mode.');
       continue;
     }
     url = value.replace(/\/+$/, '');

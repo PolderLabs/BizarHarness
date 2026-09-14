@@ -127,11 +127,11 @@ function cleanupFixture(home) {
 
 // ── 1. forceCleanInstall wipes the right set ────────────────────────────────
 
-test('forceCleanInstall wipes the 7 Bizar-managed dirs under ~/.claude/ + ~/.agents/ + settings.json', async () => {
+test('explicit emergency reset wipes the legacy global scope', async () => {
   const { home, claudeDir, agentsDir } = freshFixture();
   try {
     const { forceCleanInstall } = await import('../provision.mjs');
-    const result = forceCleanInstall();
+    const result = forceCleanInstall({ reallyResetGlobalClaudeConfig: true });
     assert.equal(result.ok, true);
 
     const managed = ['agents', 'skills', 'commands', 'hooks', 'rules', 'workflows', 'plugins'];
@@ -289,7 +289,7 @@ test('forceCleanInstall({ dryRun: true }) reports paths but performs no rmSync',
   const { home, claudeDir, agentsDir } = freshFixture();
   try {
     const { forceCleanInstall } = await import('../provision.mjs');
-    const result = forceCleanInstall({ dryRun: true });
+    const result = forceCleanInstall({ dryRun: true, reallyResetGlobalClaudeConfig: true });
     // Dirs must still exist (dry-run).
     for (const sub of ['agents', 'skills', 'commands', 'hooks', 'rules', 'workflows', 'plugins']) {
       assert.equal(existsSync(join(claudeDir, sub)), true, `${sub}/ must NOT be wiped in dry-run`);
@@ -311,7 +311,7 @@ test('force + writeClaudeSettings: template emits empty allow + operator env sta
     const script = `
       import { forceCleanInstall, writeClaudeSettings, clearSavedEnv } from './cli/provision.mjs';
       clearSavedEnv();
-      const clean = forceCleanInstall();
+      const clean = forceCleanInstall({ reallyResetGlobalClaudeConfig: true });
       const result = writeClaudeSettings({ force: true });
       if (!result.ok) { process.stdout.write('WRITE_FAIL: ' + result.message); process.exit(2); }
       process.stdout.write(JSON.stringify({
@@ -454,7 +454,7 @@ test('after force + sync*, agents/skills/commands/hooks/rules are re-synced from
     // step (which expects a real .git/hooks dir).
     const script = `
       import { forceCleanInstall, syncAgentFiles, syncSkillFiles, syncCommandFiles, syncRulesFiles, syncHookFiles } from './cli/provision.mjs';
-      forceCleanInstall();
+      forceCleanInstall({ reallyResetGlobalClaudeConfig: true });
       const agents = await syncAgentFiles({ force: true });
       const skills = await syncSkillFiles({ force: true });
       const commands = await syncCommandFiles({ force: true });

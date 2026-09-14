@@ -13,17 +13,15 @@ import { runStatuslineInstall } from '../commands/statusline.mjs';
 import { showBanner, sectionHeading } from './banner.mjs';
 import { printInstallLocations } from './paths.mjs';
 import { runInteractiveSetup } from './interactive-setup.mjs';
+import { normalizeProvisionPolicy } from '../policies.mjs';
 
 /**
  * Thin orchestrator entry point.
  *
  * Behavior (v10.16.2+, F-183):
- *   - When `force === true`, run `forceCleanInstall` *before*
- *     `runProvision` so the Bizar-managed dirs under `~/.claude/` and
- *     `~/.agents/` are wiped, `~/.claude/settings.json` is removed, and
- *     the prior env vars are stashed into `process.env.BIZAR_SAVED_ENV`
- *     for the factory to re-inject. We always pass `force: true` to
- *     `runProvision` regardless of how the caller phrased the flag.
+ *   - `force` repairs only files recorded in Bizar's ownership ledger.
+ *     The emergency whole-config reset is opt-in via
+ *     `reallyResetGlobalClaudeConfig`.
  *   - After the provisioner completes, run `runDoctor({ silent: true })`
  *     and surface the result so forced installs surface a health summary.
  *   - The wipe report is returned to the caller (e.g. `bizar install`)
@@ -31,7 +29,8 @@ import { runInteractiveSetup } from './interactive-setup.mjs';
  *
  * @param {object} opts
  * @param {boolean} [opts.dryRun]
- * @param {boolean} [opts.force]   - overwrite existing files AND prune stale entries AND wipe dirs (F-183)
+ * @param {boolean} [opts.force]   - repair Bizar-owned files from the ledger
+ * @param {boolean} [opts.reallyResetGlobalClaudeConfig] - explicit emergency reset
  * @param {boolean} [opts.quiet]   - Only print the location card
  * @param {string}  [opts.mode]    - 'install' | 'update'
  * @param {boolean} [opts.yes]     - assume yes for any non-destructive prompts
@@ -45,6 +44,8 @@ export async function runInstaller(opts = {}) {
     quiet = false,
     mode = 'install',
     yes = false,
+    reallyResetGlobalClaudeConfig = false,
+    postInstallDoctor = false,
     statuslineInstall = runStatuslineInstall,
     provision = runProvision,
   } = opts;
@@ -73,9 +74,10 @@ export async function runInstaller(opts = {}) {
   // `process.env.BIZAR_SAVED_ENV` so the next `writeClaudeSettings` call
   // re-injects them after re-emitting the file from the template.
   let clean = null;
-  if (force) {
+  const policy = normalizeProvisionPolicy({ force, reallyResetGlobalClaudeConfig });
+  if (force || reallyResetGlobalClaudeConfig) {
     clearSavedEnv();
-    clean = forceCleanInstall({ dryRun });
+    clean = forceCleanInstall({ dryRun, reallyResetGlobalClaudeConfig });
     if (!quiet && clean?.wiped?.length) {
       sectionHeading('Pre-install wipe (F-183)');
       console.log(`  wiped: ${clean.wiped.length} path(s)`);
@@ -88,13 +90,12 @@ export async function runInstaller(opts = {}) {
     }
   }
 
-  // Always pass `force: true` downstream so `runProvision` re-emits the
-  // template-owned keys (permissions.allow wildcards, mcpServers, hooks)
-  // into the freshly-empty settings file.
   const provisionResult = await provision({
     mode,
     dryRun,
-    force: true,
+    force,
+    policy,
+    reallyResetGlobalClaudeConfig,
     yes,
     openkanHome: interactive?.openkanHome,
     initializeOpenKanProject: interactive?.initializeOpenKanProject === true,
@@ -116,11 +117,9 @@ export async function runInstaller(opts = {}) {
     }
   }
 
-  // F-183 — post-install health check. Surfaced as a warning rather
-  // than a hard failure so a forced install that completes without
-  // error still reports its doctor summary; the operator decides
-  // whether to investigate.
-  if (!dryRun) {
+  // Full doctor is opt-in; routine updates use the provisioner's required
+  // invariants and avoid running the repository-wide diagnostic twice.
+  if (!dryRun && postInstallDoctor) {
     try {
       const doctorResult = await runDoctor({ silent: true });
       provisionResult.doctor = doctorResult;

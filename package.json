@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "10.32.0",
+  "version": "10.33.0",
   "description": "Agent Orchestrator-first maximum-autonomy worker harness for Codex and Claude Code with evidence-driven verification, typed runtime contracts, and MCP tools.",
   "type": "module",
   "bin": {
@@ -42,9 +42,10 @@
     "test:node": "node scripts/run-node-tests.mjs",
     "test": "node scripts/with-sdk-dist-lock.mjs node scripts/run-test-with-sdk-build.mjs",
     "build": "npm run build:sdk",
+    "verify:sdk-artifact": "node scripts/verify-sdk-artifact.mjs",
     "release:bump": "node scripts/bump-version.mjs",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm run verify:sdk-artifact",
+    "prepublishOnly": "npm run verify:sdk-artifact"
   },
   "keywords": [
     "claude-code",

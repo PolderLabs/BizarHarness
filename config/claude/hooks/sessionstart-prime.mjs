@@ -2,13 +2,13 @@
 /**
  * sessionstart-prime.mjs — Claude Code SessionStart hook.
  *
- * Primes every Bizar session with project-state context so the first turn
- * can ship instead of spending 5 turns orienting.
+ * Primes every Bizar session with only the selected execution-backend state;
+ * OpenWolf owns project memory, anatomy, and handoff context when active.
  *
  * Reads (lazily, best-effort — never throws):
  *   1. OpenKan `.ok/`         → active tasks, plans, and PRD goals
- *   2. git log --oneline -10  → recent commits
- *   3. .bizar/PROJECT.md      → project name + one-line summary
+ *   2. git log --oneline -10  → recent commits (fallback orientation only)
+ *   3. .bizar/PROJECT.md      → legacy fallback summary when OpenWolf is unavailable
  *
  * Branches on `source`:
  *   - startup  → all 4 sources, full briefing
@@ -30,9 +30,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildLearningContext } from '../../../cli/commands/learn.mjs';
 import { resolveBizarHome } from '../../../cli/config-paths.mjs';
 import { listOpenKanGoals, listOpenKanPlans, listOpenKanTasks } from '../../../cli/openkan-store.mjs';
+import { resolveExecutionBackend } from '../../../cli/execution-context.mjs';
+import { ensureOpenWolfProject } from '../../../cli/openwolf.mjs';
 
 const MAX_BRIEFING = 1200; // hard cap, characters (was 800; +400 to fit the F-207 goal line)
 const PROJECT_NAME = 'BizarHarness';
@@ -131,7 +132,8 @@ function projectSummary(cwd) {
   return summary;
 }
 
-function openKanBrief(cwd) {
+function openKanBrief(cwd, executionBackend) {
+  if (executionBackend === 'ao') return null;
   try {
     const tasks = listOpenKanTasks(cwd);
     const plans = listOpenKanPlans(cwd);
@@ -159,10 +161,15 @@ function sessionState(cwd) {
 
 // ── Briefing builders ──────────────────────────────────────────────────────
 
-function startupBriefing(cwd, planning, recentCommits, projectLine) {
+function startupBriefing(cwd, planning, recentCommits, projectLine, executionBackend, openWolf) {
   const lines = ['Bizar SessionStart (startup):'];
+  lines.push(`- Execution backend: ${executionBackend}. Work-state authority is mutually exclusive: use OpenKan in standalone mode or Agent Orchestrator in AO mode, never both.`);
+  if (openWolf?.status === 'unavailable') lines.push('- OpenWolf: unavailable for this session; native Read/Grep/Glob/Bash tools remain the fallback. Do not retry it repeatedly.');
+  else if (openWolf?.status === 'ready') lines.push('- OpenWolf project memory/context is active; trust its hooks and use openwolf find/map only when they save meaningful repository reads.');
   if (projectLine) lines.push(`- Project: ${projectLine}.`);
-  if (!planning?.exists) {
+  if (executionBackend === 'ao') {
+    lines.push('- AO: Agent Orchestrator owns tasks, sessions, workers, and worktrees for this context; .ok/ is inactive.');
+  } else if (!planning?.exists) {
     lines.push('- OpenKan: .ok/ is not initialised. First move: run `ok init`, then create a scoped task or PRD.');
   } else if (planning.active.length === 0) {
     lines.push(`- OpenKan: ${planning.tasks.length} task(s), ${planning.plans.length} plan(s), ${planning.goals.length} PRD(s); no active task.`);
@@ -175,8 +182,8 @@ function startupBriefing(cwd, planning, recentCommits, projectLine) {
       lines.push(`- Recent: ${recentCommits.slice(1, 6).join(' | ')}.`);
     }
   }
-  lines.push('- You are @mike. For non-tiny work, do bounded read-only orientation, then form a native Agent team by default. Ask one concise clarification only when a material choice, acceptance criterion, or safety boundary remains unresolved; otherwise continue autonomously. /quick is the explicit direct-execution exception. Use worktrees for editors and explicit Bizar models for every Agent.');
-  lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills. OpenKan .ok is the sole task/progress/goals authority.');
+  lines.push('- You are @mike. Prefer direct execution with available capabilities; delegate only for independent parallelism, specialization, context isolation, long-running work, or independent review with positive expected value.');
+  lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills. The selected execution backend is the only task/progress authority.');
   lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume its original <result> once, mark done/failed, merge queued work, and continue the objective. Never turn a terminal notification into a worker follow-up or replace that result with a later status reply.');
   // Default-first-stop hint when nothing is active yet.
   if (planning && planning.active.length === 0) {
@@ -221,26 +228,31 @@ function resumeBriefing(cwd, state) {
 function buildBriefing(input) {
   const source = String(input.source || 'startup');
   const cwd = String(input.cwd || process.cwd());
-  const planning = openKanBrief(cwd);
-  const goalLine = planning?.goals.find((prd) => prd.status === 'active')
-    ? `OpenKan goal: ${planning.goals.find((prd) => prd.status === 'active').id} — active.`
-    : 'OpenKan goal: no active PRD.';
+  const executionBackend = resolveExecutionBackend({ cwd, env: process.env });
+  const openWolf = ensureOpenWolfProject({ cwd, env: process.env });
+  const planning = openKanBrief(cwd, executionBackend);
+  const goalLine = executionBackend === 'ao'
+    ? 'AO work-state: active context selected.'
+    : (planning?.goals.find((prd) => prd.status === 'active')
+      ? `OpenKan goal: ${planning.goals.find((prd) => prd.status === 'active').id} — active.`
+      : 'OpenKan goal: no active PRD.');
 
   if (source === 'resume') {
     const state = sessionState(cwd);
-    return clip([goalLine, resumeBriefing(cwd, state), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
+    const resume = openWolf.status === 'ready' ? '- OpenWolf owns project handoff and compaction context; trust its injected STATUS.md state.' : resumeBriefing(cwd, state);
+    return clip([goalLine, `- Execution backend: ${executionBackend}.`, resume].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   const recentCommits = gitRecent(cwd, 10);
   const projectLine = projectSummary(cwd);
 
   if (source === 'clear') {
-    return clip([goalLine, clearBriefing(cwd, recentCommits), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
+    return clip([goalLine, `- Execution backend: ${executionBackend}.`, clearBriefing(cwd, recentCommits)].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   // Default: startup.
   return clip(
-    [goalLine, startupBriefing(cwd, planning, recentCommits, projectLine), buildLearningContext({ cwd })].filter(Boolean).join('\n'),
+    [goalLine, startupBriefing(cwd, planning, recentCommits, openWolf.status === 'ready' ? '' : projectLine, executionBackend, openWolf)].filter(Boolean).join('\n'),
     MAX_BRIEFING,
   );
 }

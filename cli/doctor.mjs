@@ -46,6 +46,7 @@ import {
 } from './commands/validate.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 import { resolveOpenKanHome, verifyOpenKanRuntime } from './openkan.mjs';
+import { openWolfHealth } from './openwolf.mjs';
 
 const REQUIRED_RULES = [
   'general.md', 'git.md', 'javascript.md', 'python.md',
@@ -197,6 +198,18 @@ async function checkOpenKanRuntime() {
   return `OpenKan ${home} is runnable (${result.launcher})`;
 }
 
+async function checkOpenWolfCli() {
+  const result = openWolfHealth({ cwd: process.cwd() });
+  if (!result.ok) throw new Error(result.message);
+  return result.message;
+}
+
+async function checkOpenWolfProject() {
+  const result = openWolfHealth({ cwd: process.cwd() });
+  if (result.project && !result.ok) throw new Error(result.message);
+  return result.project ? 'OpenWolf project state parses' : 'no .wolf/ project state in current directory';
+}
+
 async function checkAliasMap() {
   const settingsPath = join(resolveClaudeConfigDir(), 'settings.json');
   const settings = readFileSync(settingsPath, 'utf8');
@@ -233,9 +246,12 @@ async function checkOwnershipManifest() {
   const path = join(bizarHome(), 'ownership.json');
   if (!existsSync(path)) return 'ownership manifest missing (run bizar update to create it)';
   const manifest = JSON.parse(readFileSync(path, 'utf8'));
-  if (manifest.schema !== 'bizar.install-ownership.v1' || !manifest.files || typeof manifest.files !== 'object') {
+  if (!['bizar.install-ownership.v1', 'bizar.install-ownership.v2'].includes(manifest.schema)) {
     throw new Error('ownership manifest has an unsupported schema');
   }
+  if (manifest.schema === 'bizar.install-ownership.v1' && (!manifest.files || typeof manifest.files !== 'object')) throw new Error('ownership manifest has an invalid legacy file map');
+  if (manifest.schema === 'bizar.install-ownership.v2' && !Array.isArray(manifest.files)) throw new Error('ownership manifest has an invalid transaction file list');
+  if (manifest.schema === 'bizar.install-ownership.v2') return `${manifest.files.length} manifest-owned files recorded`;
   const stale = Object.entries(manifest.files).filter(([file, meta]) => !existsSync(file) || (meta?.sha256 && hashFile(file) !== meta.sha256));
   if (stale.length) return `ownership manifest has ${stale.length} stale entries`;
   return `${Object.keys(manifest.files).length} manifest-owned files verified`;
@@ -263,6 +279,8 @@ const CHECKS = [
   { name: 'tools-on-path',             run: checkToolsAvailable },
   { name: 'bizar-home',                run: checkBizarHome },
   { name: 'openkan-runtime',           run: checkOpenKanRuntime },
+  { name: 'openwolf-cli',              run: checkOpenWolfCli },
+  { name: 'openwolf-project',          run: checkOpenWolfProject },
   { name: 'alias-map',                 run: checkAliasMap },
   { name: 'legacy-router',             run: checkLegacyRouterPresent },
   { name: 'ownership-manifest',        run: checkOwnershipManifest },
@@ -274,7 +292,14 @@ export async function runDoctor(opts = {}) {
   let passed = 0;
   let failed = 0;
 
-  for (const check of CHECKS) {
+  const checks = opts.deepMemory
+    ? [...CHECKS, { name: 'openwolf-deep-status', run: async () => {
+      const result = openWolfHealth({ cwd: process.cwd(), deep: true });
+      if (!result.ok) throw new Error(result.message);
+      return 'openwolf status/selfcheck passed';
+    } }]
+    : CHECKS;
+  for (const check of checks) {
     let result;
     try {
       const message = await check.run();

@@ -24,7 +24,7 @@
  *   - Force-push, rebase, secret-stage, secret-push: "[advisory:critical]"
  *     tag, telling the agent to confirm with the user.
  *   - Commit, push, PR mutation, release, publish, deploy: "[advisory]"
- *     tag, telling the agent to confirm and that these used to be HITL.
+ *     tag, telling the agent to review evidence; these are advisory only.
  *   - Conventional-commit shape: hint as additionalContext.
  */
 
@@ -327,7 +327,7 @@ process.stdin.on('end', () => {
     if (conventional) {
       extras.push(`Conventional commit hint: prefer "type: subject" (types: ${ALLOWED_COMMIT_TYPES.join(', ')}).`);
     }
-    extras.push('Local commits used to require HITL confirmation; F-176 lets them proceed silently.');
+    extras.push('Local commits are autonomous by default; review the advisory evidence before proceeding.');
     advisory('warn', reason, extras.join(' '));
     return;
   }
@@ -343,12 +343,12 @@ process.stdin.on('end', () => {
       );
       return;
     }
-    advisory('warn', 'Publish or modify this pull request on GitHub?', 'PR mutations used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
+    advisory('warn', 'Publish or modify this pull request on GitHub?', 'PR mutations remain autonomous; verify target, evidence, and rollback context before proceeding.');
     return;
   }
 
   if (hasGhCommand(command, 'pr', 'merge|close|reopen|ready|review|comment')) {
-    advisory('warn', 'Apply this pull-request state change on GitHub?', 'PR mutations used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
+    advisory('warn', 'Apply this pull-request state change on GitHub?', 'PR mutations remain autonomous; verify target, evidence, and rollback context before proceeding.');
     return;
   }
   if (push) {
@@ -362,14 +362,14 @@ process.stdin.on('end', () => {
       );
       return;
     }
-    advisory('warn', 'Push local commits to the remote repository.', 'Push used to require HITL confirmation; F-176 lets it proceed with a heads-up.');
+    advisory('warn', 'Push local commits to the remote repository.', 'Pushes remain autonomous; verify target, outbound diff, and rollback context before proceeding.');
     return;
   }
   const releaseMutation = hasGhCommand(command, 'release', 'create|edit|delete|upload');
   const packagePublish = /\b(?:npm|bun|pnpm)\b[\s\S]*\bpublish\b/i.test(command);
   const deployment = /\b(?:(?:npx|bunx|pnpm\s+exec)\s+)?(?:vercel|wrangler|flyctl)\b[\s\S]*(?:\bdeploy\b|\bpublish\b|--prod\b)/i.test(command);
   if (releaseMutation || packagePublish || deployment) {
-    advisory('warn', 'This command publishes or deploys externally.', 'Release/publish/deploy used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
+    advisory('warn', 'This command publishes or deploys externally.', 'Release/publish/deploy remains autonomous; verify provenance, target, and rollback context before proceeding.');
     return;
   }
   // F-194 Phase C: `bizar improve run --apply --yes` mutates a shipped or

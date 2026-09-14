@@ -44,14 +44,14 @@ function context(dir, input = {}) {
   return JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
 }
 
-test('startup reports active OpenKan work and active PRD', () => {
+test('startup reports active OpenKan work and selected OpenWolf memory authority', () => {
   const dir = project();
   try {
     const value = context(dir);
     assert.match(value, /OpenKan goal: prd-1 — active/);
     assert.match(value, /OpenKan active: tsk-101 — Wire OpenKan briefing/);
-    assert.match(value, /A test fixture for the OpenKan SessionStart hook/);
-    assert.match(value, /OpenKan \.ok is the sole task\/progress\/goals authority/);
+    assert.match(value, /OpenWolf project memory\/context is active/);
+    assert.match(value, /selected execution backend is the only task\/progress authority/);
     assert.doesNotMatch(value, /feature_list\.json|PROGRESS\.md|WIP=1/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -66,14 +66,13 @@ test('startup tells the agent how to select ready OpenKan work', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('resume restores the OpenKan task handoff', () => {
+test('resume trusts OpenWolf handoff instead of duplicating Bizar session state', () => {
   const dir = project();
   try {
     writeFileSync(join(dir, '.bizar', 'session-state.json'), JSON.stringify({ activeTask: 'tsk-101', nextStep: 'finish tests', blockers: ['Error: ENOENT'] }));
     const value = context(dir, { source: 'resume' });
-    assert.match(value, /Last active OpenKan task: tsk-101/);
-    assert.match(value, /finish tests/);
-    assert.match(value, /Open blockers: Error: ENOENT/);
+    assert.match(value, /OpenWolf owns project handoff/);
+    assert.doesNotMatch(value, /Last active OpenKan task/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

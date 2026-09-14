@@ -26,7 +26,7 @@ Impact is metadata, not a Bizar approval gate. Honor explicit operator
 restrictions and reject only invalid target/schema/state contracts. Record
 stronger evidence and rollback context for high-impact operations.
 
-Historical guidance that said human approval was required before:
+Historical guidance that treated these actions as a separate permission gate:
 
 - publishing packages, releases, pull requests, or deployments;
 - pushing commits or changing remote branches;

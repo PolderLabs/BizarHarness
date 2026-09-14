@@ -3,6 +3,10 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { detectSkillsCli } from './utils.mjs';
+import { ensureOpenKanProject } from './openkan.mjs';
+import { ensureOpenWolfRuntime, initOpenWolfProject } from './openwolf.mjs';
+import { migrateProjectMemoryToOpenWolf } from './openwolf-memory.mjs';
+import { persistExecutionContext, resolveExecutionContext } from './execution-context.mjs';
 
 function detectStack(cwd) {
   const stack = { language: null, framework: null, database: null, tools: [], build: null, test: null, runner: null };
@@ -104,6 +108,35 @@ export async function runInit(cwd, opts = {}) {
   const bizarDir = join(cwd, '.bizar');
   mkdirSync(bizarDir, { recursive: true });
 
+  const executionContext = resolveExecutionContext({
+    cwd,
+    env: opts.env || process.env,
+    explicit: opts.executionBackend,
+    sessionId: opts.sessionId,
+  });
+  persistExecutionContext(executionContext, { cwd, dryRun: opts.dryRun });
+  console.log(chalk.green(`  ✓ Execution backend: ${executionContext.executionBackend}`));
+
+  if (executionContext.executionBackend === 'openkan') {
+    try {
+      if (!opts.dryRun) ensureOpenKanProject();
+      console.log(chalk.green(`  ✓ OpenKan is the sole work-state authority for this context`));
+    } catch (error) {
+      console.log(chalk.yellow(`  ! OpenKan project state was not initialized: ${error.message || String(error)}`));
+    }
+  } else {
+    console.log(chalk.green('  ✓ AO is the sole work-state authority; .ok/ is inactive'));
+  }
+
+  const openWolfRuntime = ensureOpenWolfRuntime({ dryRun: opts.dryRun, env: opts.env || process.env });
+  if (openWolfRuntime.ok) console.log(chalk.green(`  ✓ ${openWolfRuntime.message}`));
+  else console.log(chalk.yellow(`  ! OpenWolf unavailable: ${openWolfRuntime.message}`));
+  const openWolfProject = openWolfRuntime.ok
+    ? initOpenWolfProject({ cwd, dryRun: opts.dryRun, env: opts.env || process.env })
+    : { ok: true, status: 'unavailable', message: 'OpenWolf project initialization deferred' };
+  if (openWolfProject.ok) console.log(chalk.green(`  ✓ ${openWolfProject.message}`));
+  else console.log(chalk.yellow(`  ! OpenWolf project initialization deferred: ${openWolfProject.message}`));
+
   // Detect stack
   console.log(chalk.dim('  Detecting project stack...'));
   const stack = detectStack(cwd);
@@ -174,14 +207,23 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
 `;
 
   const projPath = join(bizarDir, 'PROJECT.md');
-  writeFileSync(projPath, projectMd);
-  console.log(chalk.green(`  ✓ Created ${projPath}`));
+  if (!existsSync(projPath)) {
+    writeFileSync(projPath, projectMd);
+    console.log(chalk.green(`  ✓ Created ${projPath}`));
+  } else {
+    console.log(chalk.dim(`  - Preserved existing ${projPath}`));
+  }
 
   const projectLearning = initializeProjectLearningStore(bizarDir);
   if (projectLearning.created) process.stdout.write(`${chalk.green(`  ✓ Created ${projectLearning.path}`)}\n`);
 
-  // Generate PRE_PUSH_NOTES.md
-  writePrePushNotesFile(bizarDir);
+  // Generate PRE_PUSH_NOTES.md only on first initialization.
+  if (!existsSync(join(bizarDir, 'PRE_PUSH_NOTES.md'))) writePrePushNotesFile(bizarDir);
+
+  if (openWolfProject.ok && openWolfProject.status === 'ready' && !opts.dryRun) {
+    const migration = migrateProjectMemoryToOpenWolf({ cwd });
+    if (migration.ok) console.log(chalk.green(`  ✓ OpenWolf memory migration: ${migration.migrated ? `${migration.marker.itemsImported} item(s)` : 'already complete'}`));
+  }
 
   console.log(chalk.dim('\n  Project initialized. Run `@susan` to ask questions about the codebase.\n'));
   return true;

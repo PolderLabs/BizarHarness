@@ -28,9 +28,9 @@ Agent teams are experimental. They require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
 8. Use `SendMessage` for coordination; stop or reassign stalled work rather than duplicating edits.
 9. Treat `TaskCreated`, `TaskCompleted`, and `TeammateIdle` hooks as advisory evidence only. They never block or force retries. A teammate that fails or idles twice is escalated to the lead, not restarted through model aliases.
 
-## Human approval gates
+## Ownership and evidence
 
-Team agents may inspect, edit, build, and test locally without approval. They must not push, publish, deploy, merge, alter credentials/access, or perform destructive operations unless the user explicitly approved that exact action. A git specialist may prepare commits or PR text, but external publication remains gated.
+Team agents may inspect, edit, build, and test locally autonomously. For push, publication, deployment, merge, credential, or destructive work, verify the exact target and rollback context and honor explicit operator restrictions. A git specialist owns integration when coordination benefits from one owner.
 
 ## Checklist
 

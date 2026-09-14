@@ -107,7 +107,7 @@ for (const prompt of [
     const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
     assert.match(context, /Adaptive Bizar routing policy/);
     assert.match(context, /Ask one concise question only/);
-    assert.match(context, /Agent teams are the default execution method/);
+    assert.match(context, /Prefer direct execution with the available capabilities/);
     assert.match(context, /pick ONE of the four native aliases/);
     assert.match(context, /`haiku`, `sonnet`, `opus`, `fable`/);
     assert.match(context, /OmniRoute handles ordered failover/);
@@ -205,7 +205,7 @@ test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel ab
   assert.ok(obj);
   assert.match(obj.hookSpecificOutput.additionalContext, /you ARE @mike/);
   assert.match(obj.hookSpecificOutput.additionalContext, /Ask one concise question only/);
-  assert.match(obj.hookSpecificOutput.additionalContext, /Agent teams are the default execution method/);
+  assert.match(obj.hookSpecificOutput.additionalContext, /Prefer direct execution with the available capabilities/);
 });
 
 test('worker-suggest: appends only bounded explicit learning, not telemetry feeds', () => {
@@ -248,7 +248,7 @@ test('worker-suggest: appends only bounded explicit learning, not telemetry feed
 
 // Phase 6 — OMX-derived primitive pivot block must appear on every non-empty
 // prompt that reaches the dispatcher path. The block is informational; the
-// seven-category HITL floor and the deep-interview ambiguity floor remain
+// high-impact evidence guidance and deep-interview ambiguity floor remain
 // surfaced on top of every primitive.
 test('worker-suggest: emits the OMX-derived primitive pivot block on a substantive prompt', () => {
   const { status, stdout, stderr } = runHook({
@@ -266,8 +266,8 @@ test('worker-suggest: emits the OMX-derived primitive pivot block on a substanti
   assert.match(ctx, /`ultragoal`/);
   assert.match(ctx, /`bizplan`/);
   assert.match(ctx, /`brainstorming`/);
-  // Both Phase 6 gates are surfaced on every substantive prompt.
-  assert.match(ctx, /HITL-floor category/);
+  // Evidence guidance and ambiguity are surfaced on every substantive prompt.
+  assert.match(ctx, /High-impact actions still require stronger evidence/);
   assert.match(ctx, /ambiguity score is > 0\.10/);
 });
 
@@ -387,7 +387,7 @@ test('worker-suggest: appends worker-suggest rows to behavior.jsonl when matches
 
 // Phase 6 — OMX-derived primitive pivot block must appear on every non-empty
 // prompt that reaches the dispatcher path. The block is informational; the
-// seven-category HITL floor and the deep-interview ambiguity floor remain
+// high-impact evidence guidance and deep-interview ambiguity floor remain
 // surfaced on top of every primitive.
 test('worker-suggest: emits the OMX-derived primitive pivot block on a substantive prompt', () => {
   const { status, stdout, stderr } = runHook({
@@ -405,8 +405,8 @@ test('worker-suggest: emits the OMX-derived primitive pivot block on a substanti
   assert.match(ctx, /`ultragoal`/);
   assert.match(ctx, /`bizplan`/);
   assert.match(ctx, /`brainstorming`/);
-  // Both Phase 6 gates are surfaced on every substantive prompt.
-  assert.match(ctx, /HITL-floor category/);
+  // Evidence guidance and ambiguity are surfaced on every substantive prompt.
+  assert.match(ctx, /High-impact actions still require stronger evidence/);
   assert.match(ctx, /ambiguity score is > 0\.10/);
 });
 

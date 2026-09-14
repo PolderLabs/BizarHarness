@@ -1,6 +1,6 @@
 ---
 name: resolve-pr-comments
-description: Resolve actionable pull-request review comments with local fixes, tests, and approval-gated GitHub updates.
+description: Resolve actionable pull-request review comments with local fixes, tests, and evidence-backed GitHub updates.
 ---
 
 # Resolve pull-request comments

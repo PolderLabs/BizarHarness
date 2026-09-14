@@ -42,6 +42,16 @@ echo "════════════════════════�
 echo "  Clean-State Check"
 echo "═══════════════════════════════════════"
 
+if [[ "${1:-}" == "--cleanliness-only" ]]; then
+  # `console.log` is an intentional CLI output primitive throughout Bizar.
+  # Detect debugger statements and obvious temporary trace logging instead of
+  # rejecting every user-facing command message.
+  check "Whitespace and debug artifact hygiene" bash -c 'git diff --check && ! rg -n --glob "*.mjs" --glob "*.js" --glob "*.ts" --glob "*.tsx" --glob "*.jsx" "(^|[[:space:]])debugger([[:space:];]|$)" . && ! rg -n --glob "*.mjs" --glob "*.js" --glob "*.ts" --glob "*.tsx" --glob "*.jsx" "console\\.log\\([[:space:]]*(debug|trace|todo|temporary)\\b" .'
+  echo "Summary: $PASS passed, $FAIL failed"
+  [[ $FAIL -eq 0 ]] && exit 0
+  exit 1
+fi
+
 check "1. Build and typecheck" make check
 check "2. Retained unit tests" make test
 check "3. OpenKan workspace present" test -d .ok
