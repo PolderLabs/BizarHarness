@@ -143,6 +143,7 @@ test('settings template ships the alias binding as the canonical source', async 
   assert.equal(template.autoCompactWindow, 600000);
   assert.equal(template.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
   assert.equal(template.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT, '1');
+  assert.equal(template.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '600000');
 });
 
 describe('syncConfigExtras() — native workflows', () => {
@@ -278,6 +279,7 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.autoCompactWindow, 600000);
     assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
     assert.equal(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT, '1');
+    assert.equal(settings.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '600000');
     assert.equal(settings.disableAutoCompact, false);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
     // F-176: full permissions by default — deny/ask ship empty; external
@@ -504,6 +506,7 @@ describe('writeClaudeSettings — hook wrapper path (F-169 + F-180)', () => {
     assert.equal(settings.autoCompactWindow, 600000);
     assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
     assert.equal(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT, '1');
+    assert.equal(settings.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '600000');
   });
 
   // ── F-180 ────────────────────────────────────────────────────────────

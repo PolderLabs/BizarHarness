@@ -74,7 +74,8 @@ ship a 1M context ceiling, compact at 600k, and disable the unknown-model clamp:
   "autoCompactWindow": 600000,
   "env": {
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",
-    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1"
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "600000"
   }
 }
 ```

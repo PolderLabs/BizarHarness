@@ -1094,6 +1094,9 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       ...(shipped.env?.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT
         ? { CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: shipped.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT }
         : {}),
+      ...(shipped.env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW
+        ? { CLAUDE_CODE_AUTO_COMPACT_WINDOW: shipped.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW }
+        : {}),
     },
     hooks: {
       UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],

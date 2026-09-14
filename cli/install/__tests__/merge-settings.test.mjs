@@ -123,12 +123,14 @@ describe('writeClaudeSettings gateway environment', () => {
         env: {
           CLAUDE_CODE_MAX_CONTEXT_TOKENS: '200000',
           CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '0',
+          CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000',
         },
       },
     });
     assert.equal(settings.autoCompactWindow, 200000);
     assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '200000');
     assert.equal(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT, '0');
+    assert.equal(settings.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '200000');
   });
 
   it('fresh installs use explicit gateway environment', () => {
