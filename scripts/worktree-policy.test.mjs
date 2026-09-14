@@ -51,6 +51,13 @@ function git(cwd, ...args) {
 }
 
 describe('worktree-first agent policy', () => {
+  test('office-manager inherits the host tool surface, including MCP tools', () => {
+    const source = readFileSync(join(AGENTS_DIR, 'office-manager.md'), 'utf8');
+    assert.doesNotMatch(source, /^tools:/m, 'Mike must not use a static tool allowlist');
+    assert.match(source, /inherits the full\s+tool surface/i);
+    assert.match(source, /connected MCP servers/i);
+  });
+
   test('every ordinary code-writing subagent declares worktree isolation', () => {
     for (const file of ISOLATED_EDITORS) {
       const source = readFileSync(join(AGENTS_DIR, file), 'utf8');

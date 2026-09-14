@@ -47,8 +47,9 @@ describe('prompt-trim v10.20.0', () => {
   test('office-manager defaults to direct capability and delegates for measurable value', () => {
     const source = readFileSync(OFFICE_MANAGER, 'utf8');
     const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
-    assert.match(frontmatter, /^tools:.*\bWorkflow\b/m);
-    assert.match(frontmatter, /^tools:.*\bAskUserQuestion\b/m);
+    assert.doesNotMatch(frontmatter, /^tools:/m);
+    assert.match(source, /inherits the full\s+tool surface/i);
+    assert.match(source, /connected MCP servers/i);
     assert.match(source, /direct execution using the capabilities already/);
     assert.match(source, /delegate only when independent parallelism/);
     assert.match(source, /isolation: "worktree"/);

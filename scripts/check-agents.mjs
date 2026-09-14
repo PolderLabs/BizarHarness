@@ -43,7 +43,12 @@ for (const file of AGENT_FILES) {
   const hasBaseline = /AGENT_BASELINE|agent-baseline/i.test(text);
   const hasClaudeTools = /CLAUDE_TOOLS/i.test(text);
   const name = /^name:\s*([^\s]+)\s*$/m.exec(text)?.[1];
-  const tools = /^tools:\s*(.+)$/m.exec(text)?.[1] || '';
+  const toolsMatch = /^tools:\s*(.+)$/m.exec(text);
+  const tools = toolsMatch?.[1] || '';
+  // An omitted tools field is intentional for the primary orchestrator: per
+  // Claude Code's agent contract it inherits every tool from the host session,
+  // including dynamically connected MCP tools.
+  const inheritsHostTools = !toolsMatch;
   const writesCode = /\b(?:Edit|Write)\b/.test(tools);
   const isolated = /^isolation:\s*worktree\s*$/m.test(text);
   if (!name) {
@@ -60,7 +65,7 @@ for (const file of AGENT_FILES) {
     } else if (!hasBaseline) {
       rows.push([file, 'NO BASELINE', 'must reference AGENT_BASELINE']);
       failed++;
-    } else if (!/\bWebSearch\b/.test(tools)) {
+    } else if (!inheritsHostTools && !/\bWebSearch\b/.test(tools)) {
       rows.push([file, 'NO WEBSEARCH', 'tools must include WebSearch']);
       failed++;
     } else {
