@@ -1088,6 +1088,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       ...(shipped.env?.ANTHROPIC_DEFAULT_FABLE_MODEL
         ? { ANTHROPIC_DEFAULT_FABLE_MODEL: shipped.env.ANTHROPIC_DEFAULT_FABLE_MODEL }
         : {}),
+      ...(shipped.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS
+        ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: shipped.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS }
+        : {}),
+      ...(shipped.env?.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT
+        ? { CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: shipped.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT }
+        : {}),
     },
     hooks: {
       UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],
@@ -1135,7 +1141,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     merged.autoMode = existing.autoMode || bizarSettings.autoMode;
     merged.attribution = existing.attribution || bizarSettings.attribution;
     merged.worktree = { ...(bizarSettings.worktree || {}), ...(existing.worktree || {}) };
-    for (const key of ['enableWorkflows', 'disableWorkflows', 'workflowSizeGuideline', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries']) {
+    for (const key of ['enableWorkflows', 'disableWorkflows', 'workflowSizeGuideline', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries', 'autoCompactWindow']) {
       if (merged[key] === undefined) merged[key] = bizarSettings[key];
     }
   }
@@ -1156,7 +1162,6 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     delete merged.env.ANTHROPIC_MODEL;
     delete merged.env.CLAUDE_CODE_SUBAGENT_MODEL;
     delete merged.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY;
-    delete merged.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
   }
 
   // Auto-compaction is part of the Bizar reliability contract. Remove legacy

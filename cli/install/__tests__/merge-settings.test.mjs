@@ -116,6 +116,21 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'user-token');
   });
 
+  it('normal updates retain explicit context-window overrides', () => {
+    const settings = runProductionWriter({
+      existing: {
+        autoCompactWindow: 200000,
+        env: {
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: '200000',
+          CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '0',
+        },
+      },
+    });
+    assert.equal(settings.autoCompactWindow, 200000);
+    assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '200000');
+    assert.equal(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT, '0');
+  });
+
   it('fresh installs use explicit gateway environment', () => {
     const settings = runProductionWriter({
       env: {

@@ -67,6 +67,7 @@
   "disableWorkflows": false,
   "workflowSizeGuideline": "small",
   "disableAutoCompact": false,
+  "autoCompactWindow": 600000,
   "autoDreamEnabled": true,
   "model": "sonnet",
   "modelOverrides": {
@@ -81,7 +82,9 @@
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "default",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "common",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "hard",
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "fable"
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "fable",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1"
   },
   "hooks": {
     "UserPromptSubmit": [

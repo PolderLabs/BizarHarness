@@ -64,6 +64,24 @@ Line 3: Context usage progress bar, percentage, tokens used/total, accumulated c
 
 ## Bizar-Specific Notes
 
+Claude Code reports the context window to the statusline. For gateway or
+otherwise unregistered model IDs, Claude Code falls back to a 200k window
+unless its context settings are overridden. Bizar's managed settings therefore
+ship a 1M context ceiling, compact at 600k, and disable the unknown-model clamp:
+
+```json
+{
+  "autoCompactWindow": 600000,
+  "env": {
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1"
+  }
+}
+```
+
+These are defaults. An operator's existing values are preserved during a
+normal `bizar update`.
+
 The renderer automatically reads from your `~/.claude/settings.json`:
 
 - **Custom model**: If `env.ANTHROPIC_CUSTOM_MODEL_OPTION` is set, the `⚡ <model> (custom)` segment appears
