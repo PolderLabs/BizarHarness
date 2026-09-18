@@ -14,7 +14,7 @@
 Run focused Codex workers under Agent Orchestrator. Bizar supplies their
 repository policy, guardrails, skills, and verification evidence.
 
-`85 agents` · `85 skills` · `37 commands` · `21-tool MCP server`
+`85 agents` · `85 skills` · `43 commands` · `10 native workflows` · `21-tool MCP server`
 
 </div>
 
@@ -204,7 +204,7 @@ remain binding.
 
 | Location | Contents |
 | --- | --- |
-| `~/.claude/` | 85 agent definitions, 85 skills, 37 command surfaces, hooks, rules, workflows, and managed settings |
+| `~/.claude/` | 85 agent definitions, 85 skills, 43 command surfaces, 10 native workflows, hooks, rules, workflows, and managed settings |
 | `~/.config/bizar/` | Install record, managed OpenKan runtime, evidence, telemetry, and completed-worktree queue |
 
 `bizar control` is a machine-readable command boundary for optional external
