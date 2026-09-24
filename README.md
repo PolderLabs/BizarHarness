@@ -1,5 +1,9 @@
 <div align="center">
 
+> **Archived and retired.** Development has moved to
+> [BizarHarness-OMP](https://github.com/PolderLabs/BizarHarness-OMP). This
+> repository is retained for historical reference and is no longer maintained.
+
 <img src="docs/assets/bizar-banner.svg" alt="Bizar: maximum autonomy for Agent Orchestrator" width="100%" />
 
 [![npm](https://img.shields.io/npm/v/%40polderlabs%2Fbizar?color=0f766e&label=npm)](https://www.npmjs.com/package/@polderlabs/bizar)
